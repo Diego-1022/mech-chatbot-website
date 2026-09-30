@@ -1,41 +1,54 @@
-# Harbour Auto — Team Source Code
+# Harbour Auto
 
-A classroom car workshop website with online booking, customer booking management, a restricted administrator dashboard, and an OpenAI-powered assistant.
+A classroom workshop website. English is the default, with Chinese available from the header.
 
-**Live website:** https://harbour-auto-workshop.diegohu1022.chatgpt.site/
+## Included
+- Six fictional workshop services with clearly labelled AUD estimate ranges.
+- Appointment slots in Australia/Sydney time, Monday–Friday 09:00–17:00 and Saturday 09:00–12:00.
+- Booking, review, persistent save, private management links, rescheduling and cancellation.
+- Database-enforced single active appointment per slot and retry-safe creation.
+- Workshop administration restricted to the configured administrator's signed-in email.
+- Closing/reopening individual future slots and marking bookings completed or cancelled.
+- An OpenAI assistant (GPT-4.1 mini) with bounded conversation context, catalogue estimate cards and an embedded booking form. Explicitly labelled rule guidance remains available if the API is unavailable.
 
-The live website was made public on 30 September 2026. This archive is a source-code handoff, not a copy of the production database or hosting account.
+## What is not connected yet
+The assistant uses OpenAI Responses with store:false; user chat text is sent to OpenAI, while booking contact details are not automatically included. The app does not store chat history in its database. There is no email/SMS delivery, payment processing, real business address or real phone number. All prices are fictional teaching data, not market quotes. Save the private management link after booking; the short reference alone does not grant access.
 
-## Start here
+## Hosting and data
+This version uses Cloudflare Workers and D1 through Sites, rather than the previously discussed Supabase option. The deployed Site is public. Its administrator dashboard still requires the configured administrator identity. The application has its own server-side administrator allowlist even if Site access is expanded later.
 
-1. Read **SETUP.md** to run a separate local copy.
-2. Read **PROJECT_GUIDE.md** for the architecture and main source files.
-3. Read **TEST_CHECKLIST.md** for a classroom demonstration and verification checklist.
-4. Use **FILE_MANIFEST.sha256** to check the included file inventory and hashes.
+Appointment records are stored in D1, not browser storage. Management tokens are random and only their SHA-256 hashes are stored in the database. The raw token is held in the client's URL fragment. Use fictional contact details for demonstrations.
 
-All handoff documentation is in English. The source intentionally retains the existing Chinese translations because the website defaults to English and also offers Chinese as a language option.
+## Main source files
+- app/garage.tsx: homepage and service cards
+- components/booking.tsx: booking and confirmation
+- components/chat.tsx: AI assistant, rule fallback and embedded booking
+- app/manage/: customer management
+- app/admin/: signed-in administrator
+- app/api/workshop/route.ts: all validated data operations
+- lib/catalog.ts: prices, services and scheduling rules
+- lib/assistant.ts: rule-based replies
+- db/schema.ts and drizzle/: database schema and migrations
 
-## Included functionality
+## Local development
+Requires Node 22.13 or newer and npm. Install with npm ci, then npm run dev.
+Set ADMIN_EMAIL in local .env and .dev.vars for local admin testing. The portable preview's local sign-in uses seedy@sites.test.
+Generate migrations with npm run db:generate; apply only pending files using the procedure in the Sites starter documentation.
+Build with npm run build. Real production environment values are configured through Sites and must never be committed.
 
-- Six workshop services with fictional AUD price ranges.
-- Booking submission at any time, with appointments limited to workshop opening slots in Australia/Sydney time.
-- A service/time selection, contact and vehicle form, and a final review step.
-- Persistent bookings, conflict protection and retry-safe submission.
-- Private links for viewing, rescheduling and cancelling an individual booking.
-- An administrator dashboard for viewing appointments, completing or cancelling bookings, and closing or reopening slots.
-- An OpenAI assistant for general enquiries, tentative symptom guidance, catalogue estimates and opening the booking form.
-- Explicitly labelled rule-based guidance when AI is unavailable.
+## Validation
+Local API checks covered persistence, retry safety, token access protection, slot conflicts, concurrent reservations, rescheduling, cancellation, past-date rejection, administrator authorization, origin protection and assistant estimates.
+Browser checks and final publication results are recorded in the chat.
+WebMCP is feature-detected; its browser API was unavailable for native validation in the local browser. This does not affect normal site use.
 
-## Package boundaries
+## Deliberate scope
+Slots represent one vehicle's check-in, not a guaranteed repair completion time.
+No promise of continuous commercial availability is made by this classroom prototype.
 
-The package includes application source, database schema and migrations, dependency lockfile, build scripts, configuration, assets and third-party licence files. It excludes API keys, actual environment files, Git history, installed dependencies, generated builds, local databases, booking records, logs and private management links.
 
-The existing non-secret Site project ID is retained in .openai/hosting.json for source fidelity. It identifies the owner's deployment; it does not grant teammates access to deploy or administer that Site.
+## AI configuration
+OPENAI_API_KEY is a server-side Site secret. The model is pinned to gpt-4.1-mini-2025-04-14. Requests have a 25-second timeout and a 700-token output limit. Each IP has a 12-request/minute chat limit. AI_DAILY_REQUEST_LIMIT defaults to 200 requests across the site per UTC day; this request limit is not a currency budget. Key expiration or API failures trigger explicitly labelled rule guidance without affecting bookings. Price cards are generated from lib/catalog.ts.
 
-## Scope
+## Design integration
+The Kingsway wheel interaction, grey/steel palette and yellow accents are integrated with Harbour Auto functionality. See DESIGN_INTEGRATION.md for source attribution and scope.
 
-This is a fictional classroom project. Prices are teaching data, not real repair quotations. Appointment slots represent vehicle check-in times, not guaranteed repair completion times. Email/SMS notifications and payments are not implemented. Customers must save their private management link after booking.
-
-## Collaboration
-
-Use one shared repository for this source and separate branches for changes. Keep secrets in ignored local files and configure production secrets through the hosting service. Coordinate production changes with the Site owner. Sharing this ZIP does not grant hosting permissions or administrator access.
