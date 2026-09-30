@@ -1,1 +1,0 @@
-declare namespace Cloudflare {interface Env{DB?:D1Database;BUCKET?:R2Bucket;ADMIN_EMAIL?:string;OPENAI_API_KEY?:string;AI_DAILY_REQUEST_LIMIT?:string;}}
