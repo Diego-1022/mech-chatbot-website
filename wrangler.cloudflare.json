@@ -1,0 +1,11 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "harbour-auto-workshop",
+  "main": "./build/cloudflare-worker.ts",
+  "compatibility_date": "2026-05-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "vars": {"ADMIN_EMAIL":"diegohu1022@gmail.com","AI_DAILY_REQUEST_LIMIT":"50"},
+  "d1_databases": [{"binding":"DB","database_name":"harbour-auto-db","database_id":"ed1a1971-5a60-4bdf-bef5-2267864d4e25","migrations_dir":"drizzle"}]
+}

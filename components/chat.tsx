@@ -11,13 +11,13 @@ export default function Chat({open,setOpen,lang}:{open:boolean,setOpen:(v:boolea
  useEffect(()=>{end.current?.scrollIntoView({behavior:"smooth"})},[messages,busy]);
  useEffect(()=>{if(open)fetch("/api/workshop").then(r=>r.json()).then((b:any)=>setMode(b.mode==="ai"?"ai":"rules")).catch(()=>setMode("unknown"));},[open]);
  async function send(value:string){if(!value.trim()||busy)return;
- const history=messages.slice(-6).map(m=>({role:m.role,content:m.text.slice(0,2200)}));
+ const history=messages.slice(-4).map(m=>({role:m.role,content:m.text.slice(0,2200)}));
  setMessages(m=>[...m,{role:"user",text:value}]);setInput("");setBusy(true);setError("");
  try{const data=await api("chat",{message:value,lang,history});setMode(data.mode);setMessages(m=>[...m,{role:"assistant",text:data.reply,service:data.service,book:data.book,mode:data.mode,reason:data.reason,estimate:data.estimate}]);}
  catch(e){setError((e as Error).message);setInput(value);setMessages(m=>m.slice(0,-1));}finally{setBusy(false)}}
  return <><button className="chat-launch" onClick={()=>setOpen(true)}><MessageCircle size={21}/>{t("咨询与预约","Ask & book")}</button>
  <Dialog open={open} onOpenChange={setOpen}><DialogContent className="chat-dialog sm:max-w-lg">
- <div className="chat-head"><DialogTitle>{booking?t("安排预约","Book a visit"):t("Harbour 咨询助手","Harbour assistant")}</DialogTitle><DialogDescription className="mt-1 text-sm">{mode==="ai"?t("OpenAI 智能助手 · 初步建议，不代替现场检查","Powered by OpenAI · guidance, not a confirmed diagnosis"):mode==="rules"?t("基础规则助手 · 本次未使用 AI 模型","Basic rule guidance · AI is not active for this reply"):t("车辆咨询与预约","Car care & appointments")}</DialogDescription></div>
+ <div className="chat-head"><DialogTitle>{booking?t("安排预约","Book a visit"):t("Harbour 咨询助手","Harbour assistant")}</DialogTitle><DialogDescription className="mt-1 text-sm">{mode==="ai"?t("OpenAI 智能助手 · 初步建议，不代替现场检查","Powered by OpenAI · guidance, not a confirmed diagnosis"):mode==="guide"?t("店铺指南 · 标准服务资料，本次无需调用 AI","Workshop guide · standard information, no AI call needed"):mode==="rules"?t("基础规则助手 · 本次未使用 AI 模型","Basic rule guidance · AI is not active for this reply"):t("车辆咨询与预约","Car care & appointments")}</DialogDescription></div>
  {booking?<div className="chat-messages" style={{display:"block"}}><button className="link" style={{marginBottom:18}} onClick={()=>setBooking(null)}>{t("返回对话","Back to chat")}</button><Booking lang={lang} initialService={booking}/></div>:
  <div className="chat-messages" aria-live="polite"><div className="bubble">{t("你好，我可以介绍服务、参考费用和营业时间，也能帮你安排到店预约。请描述车辆症状，或选择下面的问题。","Hello. I can explain services, demo estimates and opening hours, and help you book a visit. Describe a symptom or choose a question below.")}</div>
  <p className="small muted">{t("咨询文字将发送给 OpenAI 处理。请勿在对话中填写联系方式；预约资料请在表单中填写。","Chat messages are sent to OpenAI. Keep contact details out of chat; enter booking details in the form.")}</p>

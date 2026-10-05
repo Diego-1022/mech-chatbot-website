@@ -5,6 +5,7 @@ import {getChatGPTUser} from "@/app/chatgpt-auth";
 import {services,times,validSlot,todaySydney} from "@/lib/catalog";
 import {assistantReply} from "@/lib/assistant";
 import {openaiReply,AIError} from "@/lib/openai-assistant";
+import {quickReply} from "@/lib/faq";
 export const dynamic="force-dynamic";
 class Problem extends Error{constructor(public status:number,public code:string){super(code)}}
 const reply=(data:unknown,status=200)=>Response.json(data,{status,headers:{"Cache-Control":"no-store","Referrer-Policy":"no-referrer"}});
@@ -43,10 +44,13 @@ export async function POST(request:Request){return run(async()=>{
   const d=z.object({message:z.string().trim().min(1).max(1500),lang:z.enum(["zh","en"]),history:z.array(z.union([z.string().max(1500),turn])).max(8).default([])}).parse(b);
   const history=d.history.map(h=>typeof h==="string"?{role:"user" as const,content:h}:h);
   if(history.reduce((n,h)=>n+h.content.length,0)>16000)throw new Problem(400,"INVALID_INPUT");
+  const quick=quickReply(d.message,d.lang,history.filter(h=>h.role==="user").map(h=>h.content));
+  if(quick)return reply(quick);
   const key=env.OPENAI_API_KEY||process.env.OPENAI_API_KEY;
   const fallback=(reason:string)=>({...assistantReply(d.message,d.lang,history.filter(h=>h.role==="user").map(h=>h.content)),mode:"rules",reason});
   if(!key)return reply(fallback("not_configured"));
-  const rawLimit=Number(env.AI_DAILY_REQUEST_LIMIT||"200");const limit=Number.isFinite(rawLimit)&&rawLimit>=1?Math.min(Math.floor(rawLimit),1000):200;
+  const rawLimit=Number(env.AI_DAILY_REQUEST_LIMIT??"50");const limit=Number.isFinite(rawLimit)&&rawLimit>=0?Math.min(Math.floor(rawLimit),1000):50;
+  if(limit===0)return reply(fallback("daily_limit"));
   const window=Math.floor(Date.now()/86400000);
   const used=await database().prepare("INSERT INTO rate_limits(key,window,hits) VALUES('__ai_daily',?,1) ON CONFLICT(key) DO UPDATE SET hits=CASE WHEN window=excluded.window THEN hits+1 ELSE 1 END,window=excluded.window RETURNING hits").bind(window).first<{hits:number}>();
   if((used?.hits||0)>limit)return reply(fallback("daily_limit"));

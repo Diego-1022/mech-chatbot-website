@@ -1,5 +1,8 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import {env} from "cloudflare:workers";
+import {standalone} from "@/lib/deployment";
+import {tokenFromCookie,verifySession} from "@/lib/admin-session";
 
 export type ChatGPTUser = {
   userId: string;
@@ -20,6 +23,11 @@ const CALLBACK_PATH = "/callback";
 
 export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
   const requestHeaders = await headers();
+  if(standalone){
+    if(!env.ADMIN_EMAIL || !env.ADMIN_SESSION_SECRET)return null;
+    const valid=await verifySession(tokenFromCookie(requestHeaders.get("cookie")||""),env.ADMIN_SESSION_SECRET);
+    return valid ? {userId:"workshop-admin",displayName:"Workshop administrator",email:env.ADMIN_EMAIL,fullName:null} : null;
+  }
   const userId = requestHeaders.get(USER_ID_HEADER);
   const email = requestHeaders.get(USER_EMAIL_HEADER);
   if (!userId || !email) return null;
@@ -45,7 +53,7 @@ export async function requireChatGPTUser(
   const user = await getChatGPTUser();
   if (user) return user;
 
-  redirect(chatGPTSignInPath(returnTo));
+  redirect(standalone ? "/admin/login" : chatGPTSignInPath(returnTo));
 }
 
 export function chatGPTSignInPath(returnTo: string): string {

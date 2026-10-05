@@ -33,7 +33,8 @@ export default function Garage() {
     window.scrollTo({top: top + span * index / 3, behavior:"smooth"});
   }
   useEffect(() => {
-    const query = window.matchMedia("(max-width: 860px), (max-height: 650px), (prefers-reduced-motion: reduce)");
+    // Small preview windows still use the original scroll-driven wheel.
+    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
     let frame = 0;
     function update() {
       if (query.matches || !track.current || !stage.current) return;

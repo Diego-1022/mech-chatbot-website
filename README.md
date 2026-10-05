@@ -15,7 +15,7 @@ A classroom workshop website. English is the default, with Chinese available fro
 The assistant uses OpenAI Responses with store:false; user chat text is sent to OpenAI, while booking contact details are not automatically included. The app does not store chat history in its database. There is no email/SMS delivery, payment processing, real business address or real phone number. All prices are fictional teaching data, not market quotes. Save the private management link after booking; the short reference alone does not grant access.
 
 ## Hosting and data
-This version uses Cloudflare Workers and D1 through Sites, rather than the previously discussed Supabase option. The deployed Site is public. Its administrator dashboard still requires the configured administrator identity. The application has its own server-side administrator allowlist even if Site access is expanded later.
+The project supports Cloudflare Workers and D1 through Sites, or an independent Cloudflare account. Follow [CLOUDFLARE_DEPLOYMENT.md](CLOUDFLARE_DEPLOYMENT.md) for independent deployment, password-based administrator access and cost controls. The existing public Sites deployment remains separate and retains its configured administrator identity. Deploying to a new account does not transfer existing bookings.
 
 Appointment records are stored in D1, not browser storage. Management tokens are random and only their SHA-256 hashes are stored in the database. The raw token is held in the client's URL fragment. Use fictional contact details for demonstrations.
 
@@ -47,7 +47,7 @@ No promise of continuous commercial availability is made by this classroom proto
 
 
 ## AI configuration
-OPENAI_API_KEY is a server-side Site secret. The model is pinned to gpt-4.1-mini-2025-04-14. Requests have a 25-second timeout and a 700-token output limit. Each IP has a 12-request/minute chat limit. AI_DAILY_REQUEST_LIMIT defaults to 200 requests across the site per UTC day; this request limit is not a currency budget. Key expiration or API failures trigger explicitly labelled rule guidance without affecting bookings. Price cards are generated from lib/catalog.ts.
+OPENAI_API_KEY is a server-side hosting secret. The model is pinned to gpt-4.1-mini-2025-04-14. Requests have a 25-second timeout and a 450-token output limit, with at most four recent messages. Standard FAQ replies do not call OpenAI. Each IP has a 12-request/minute AI chat limit. AI_DAILY_REQUEST_LIMIT defaults to 50 requests across the site per UTC day; a hosting environment can override this value, and this request limit is not a currency budget. Set it to 0 to disable AI calls. Key expiration or API failures trigger explicitly labelled rule guidance without affecting bookings. Price cards are generated from lib/catalog.ts.
 
 ## Design integration
 The Kingsway wheel interaction, grey/steel palette and yellow accents are integrated with Harbour Auto functionality. See DESIGN_INTEGRATION.md for source attribution and scope.
