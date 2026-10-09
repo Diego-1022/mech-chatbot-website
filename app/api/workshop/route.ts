@@ -6,12 +6,13 @@ import {services,times,validSlot,todaySydney} from "@/lib/catalog";
 import {assistantReply} from "@/lib/assistant";
 import {openaiReply,AIError} from "@/lib/openai-assistant";
 import {quickReply} from "@/lib/faq";
+import {englishCharacters,englishName,hasNonEnglishBookingText} from "@/lib/booking-input";
 export const dynamic="force-dynamic";
 class Problem extends Error{constructor(public status:number,public code:string){super(code)}}
 const reply=(data:unknown,status=200)=>Response.json(data,{status,headers:{"Cache-Control":"no-store","Referrer-Policy":"no-referrer"}});
 const service=z.enum(services.map(s=>s.id) as [string,...string[]]);
 const slot=z.object({date:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),time:z.enum(times as [string,...string[]])});
-const fields=z.object({name:z.string().trim().min(1).max(80),email:z.string().trim().email().max(150),phone:z.string().trim().regex(/^[+\d ()-]{6,30}$/),vehicle:z.string().trim().min(2).max(120),service,notes:z.string().trim().max(1000).default("")});
+const fields=z.object({name:z.string().trim().min(1).max(80).regex(englishName),email:z.string().trim().email().max(150).regex(englishCharacters),phone:z.string().trim().regex(/^[+\d ()-]{6,30}$/),vehicle:z.string().trim().min(2).max(120).regex(englishCharacters),service,notes:z.string().trim().max(1000).regex(englishCharacters).default("")});
 const secret=z.string().regex(/^[a-f0-9]{64}$/);
 async function hash(v:string){return [...new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(v)))].map(n=>n.toString(16).padStart(2,"0")).join("");}
 function valid(d:string,t:string){if(!validSlot(d,t))throw new Problem(400,"INVALID_SLOT");}
@@ -30,7 +31,7 @@ export async function POST(request:Request){return run(async()=>{
  if(!request.headers.get("content-type")?.includes("application/json"))throw new Problem(400,"INVALID_INPUT");
  const raw=await request.text();if(raw.length>24000)throw new Problem(413,"INVALID_INPUT");let b:any;try{b=JSON.parse(raw)}catch{throw new Problem(400,"INVALID_INPUT")}
  if(!b||typeof b!=="object")throw new Problem(400,"INVALID_INPUT");
- if(b.action==="create"){await rate(request,"create",12);const d=fields.merge(slot).extend({requestId:z.string().uuid(),token:secret}).parse(b);valid(d.date,d.time);const tokenHash=await hash(d.token);const existing=await database().prepare("SELECT * FROM bookings WHERE id=?").bind(d.requestId).first<Record<string,any>>();if(existing){if(existing.token_hash!==tokenHash)throw new Problem(409,"INVALID_INPUT");return reply({booking:clean(existing)});}
+ if(b.action==="create"){if(hasNonEnglishBookingText(b))throw new Problem(400,"ENGLISH_ONLY");await rate(request,"create",12);const d=fields.merge(slot).extend({requestId:z.string().uuid(),token:secret}).parse(b);valid(d.date,d.time);const tokenHash=await hash(d.token);const existing=await database().prepare("SELECT * FROM bookings WHERE id=?").bind(d.requestId).first<Record<string,any>>();if(existing){if(existing.token_hash!==tokenHash)throw new Problem(409,"INVALID_INPUT");return reply({booking:clean(existing)});}
  await database().prepare("INSERT INTO bookings(id,token_hash,name,email,phone,vehicle,service,date,time,notes,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,'confirmed',?)").bind(d.requestId,tokenHash,d.name,d.email,d.phone,d.vehicle,d.service,d.date,d.time,d.notes,new Date().toISOString()).run();const row=await database().prepare("SELECT * FROM bookings WHERE id=?").bind(d.requestId).first<Record<string,any>>();return reply({booking:clean(row!)},201);}
  if(b.action==="cancel"||b.action==="reschedule"){await rate(request,"manage",20);const row=await own(request,z.string().uuid().parse(b.id));if(row.status!=="confirmed")throw new Problem(409,"NOT_ACTIVE");
  if(b.action==="cancel"){const result=await database().prepare("UPDATE bookings SET status='cancelled' WHERE id=? AND status='confirmed'").bind(row.id).run();if(!result.meta.changes)throw new Problem(409,"NOT_ACTIVE");}
