@@ -9,7 +9,8 @@ body{background:var(--primer)}
 .kw-brand-name{display:flex!important;flex-direction:column;line-height:1.1;font-size:21px;letter-spacing:-.04em}
 .kw-brand-name>span{display:block!important;font-size:8px;letter-spacing:.19em;margin-top:5px;color:#aab2b5;font-weight:600}
 .kw-ribbon nav>a.kw-home{border-radius:50%;background:var(--signal)}
-.kw-ribbon nav>a{transition:background .2s,transform .2s}
+.kw-ribbon nav{flex-shrink:0}
+.kw-ribbon nav>a{transition:background .2s,transform .2s;flex-shrink:0}
 .kw-ribbon nav>a:hover{transform:translateY(-2px)}
 .kw-language{border-radius:999px}
 .kw-track{background:radial-gradient(ellipse at 80% 40%,#deddd5 0,transparent 50%),var(--primer)}
@@ -44,7 +45,17 @@ body{background:var(--primer)}
 .wheel-disc>span:before,.wheel-disc>span:after{content:"";position:absolute;left:50%;top:5%;width:4px;height:4px;border-radius:50%;background:#2d3435;box-shadow:0 1px 1px #cbd0d044}
 .wheel-disc>span:after{top:14%;left:58%}
 .kw-wheel .wheel-caliper{inset:auto;left:55%;top:26%;width:32%;height:48%;object-fit:contain;z-index:1;filter:drop-shadow(-3px 4px 3px #0008)}
-.kw-wheel .wheel-rim{transform:rotate(var(--wheel-rotation,0deg));z-index:2;will-change:transform}
+.wheel-texture-filters{position:absolute;pointer-events:none}
+.wheel-tyre-base,.kw-wheel .wheel-tyre-texture{position:absolute;inset:0;z-index:2;pointer-events:none;mask-image:radial-gradient(circle closest-side,transparent 76.8%,#000 77.8%,#000 97%,transparent 99%)}
+.wheel-tyre-base{background:radial-gradient(circle closest-side,#171b1d 78%,#2d3133 83%,#25292b 91%,#1a1e20 97%,transparent 99%)}
+.kw-wheel .wheel-tyre-texture{transform:rotate(var(--wheel-rotation,0deg));opacity:.7;will-change:transform}
+.kw-wheel .wheel-rim{transform:rotate(var(--wheel-rotation,0deg));z-index:2;will-change:transform;mask-image:radial-gradient(circle closest-side,#000 77%,transparent 78%)}
+/* The rotating alpha mask follows the spokes; counter-rotation keeps the
+   diffuse light field fixed. It never fills the openings over the caliper. */
+.wheel-material-light{position:absolute;inset:0;z-index:3;pointer-events:none;transform:rotate(var(--wheel-rotation,0deg));mask-image:url('/wheel-neutral-v3.png');mask-size:100% 100%;mask-repeat:no-repeat}
+.wheel-fixed-rim-light{position:absolute;inset:0;transform:rotate(calc(-1 * var(--wheel-rotation,0deg)));background:linear-gradient(145deg,#ffffff21 5%,transparent 45%,#00000026 90%);mask-image:radial-gradient(circle closest-side,#000 70%,transparent 77%)}
+/* Tyre reflection is a separate, non-rotating annulus outside the alloy rim. */
+.wheel-tyre-light{position:absolute;inset:0;z-index:4;pointer-events:none;border-radius:50%;background:linear-gradient(145deg,#ffffff1c 5%,transparent 46%,#00000040 90%);mask-image:radial-gradient(circle closest-side,transparent 75%,#000 79%,#000 96%,transparent 99%)}
 .kw-wheel-v2 .kw-marker{width:42px;height:42px;border:1px solid #a8aca1;background:#eeede8;color:#6c7168;box-shadow:0 3px 10px #29332b0a;transition:background .25s,color .25s,box-shadow .25s}
 .kw-wheel-v2 .kw-marker.active{background:var(--signal);border-color:var(--signal);color:#242d31;box-shadow:0 0 0 6px #f4c44322}
 .kw-wheel-v2 .kw-marker:hover{background:var(--signal);color:#242d31}
@@ -108,3 +119,14 @@ body{background:#151b1e}
 /* Keep account and private-booking pages readable on the graphite shell. */
 .screen{color:#f5f3ec;padding-bottom:45px}.screen>.eyebrow{color:#ffd34c}.screen>.muted,.screen>p.muted{color:#a4b4b5}.screen>.link{color:#ffd34c}.screen .panel{color:#1c1f22;background:#f5f3ec;border-color:#d1d4c7;box-shadow:0 12px 35px #0002}.screen .panel .primary{background:#ffd34c;border-color:#ffd34c;color:#182023}.screen>.small.muted{color:#a4b4b5}
 .booking-flow{animation:kw-preview-reveal .3s ease-out}.booking-progress{display:flex;list-style:none;margin:5px 0 24px;padding:0;gap:8px}.booking-progress li{display:flex;align-items:center;gap:7px;flex:1;font-size:.72rem;color:#72776c;padding-bottom:12px;border-bottom:2px solid #d7d8ca}.booking-progress li>span{display:grid;place-items:center;width:23px;height:23px;border-radius:50%;background:#e6e7dc;color:#72776c;font-size:.68rem}.booking-progress li.current{color:#252e30;border-color:#c99e27;font-weight:700}.booking-progress li.current>span{background:#ffd34c;color:#182023}.booking-progress li.complete{border-color:#738576}.booking-progress li.complete>span{background:#dfe9dc;color:#3a6944}.booking-success{animation:kw-preview-reveal .4s ease-out}.chat-dialog[data-state=open]{animation:kw-dialog-enter .25s ease-out}.chat-messages .bubble{animation:kw-preview-reveal .25s ease-out}@keyframes kw-dialog-enter{from{opacity:0;scale:.97}to{opacity:1;scale:1}}@media(prefers-reduced-motion:reduce){.booking-flow,.booking-success,.chat-dialog[data-state=open],.chat-messages .bubble{animation:none}}
+
+/* Keep circular navigation controls square at every responsive breakpoint. */
+.kw-ribbon nav>a{width:var(--nav-icon-size,46px);height:var(--nav-icon-size,46px);aspect-ratio:1}
+.kw-language{flex-shrink:0;white-space:nowrap}
+@media(max-width:860px){.kw-ribbon{--nav-icon-size:40px}}
+@media(max-width:480px){.kw-ribbon{--nav-icon-size:34px}}
+@media(max-width:360px){
+ .kw-ribbon{--nav-icon-size:30px;padding:0 10px;gap:6px}
+ .kw-brand{gap:5px}.kw-brand-name{font-size:15px}
+ .kw-language{font-size:.75rem;padding:6px!important}
+}

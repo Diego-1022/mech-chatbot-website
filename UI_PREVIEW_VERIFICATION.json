@@ -50,5 +50,59 @@
     "errors": 8,
     "warnings": 3,
     "comparisonToMain": "All eight errors exist in main; the two img warnings move from garage.tsx to wheel-showcase.tsx. No additional errors or warning count increase."
+  },
+  "wheelLightingUpdate": {
+    "asset": "public/wheel-neutral-v3.png",
+    "mode": "ImageGen edit of original asset; neutral diffuse finish",
+    "alphaVerified": "RGBA, outer background and sampled spoke gap fully transparent",
+    "layers": "stationary tyre annulus; counter-rotating rim light inside rotating alpha mask",
+    "rotationChecks": [
+      0,
+      90,
+      180
+    ],
+    "typecheck": "passed",
+    "cloudflareBuild": "passed",
+    "componentLint": "0 errors; 2 existing img warnings",
+    "status": "local follow-up; not pushed or deployed",
+    "mobile390": "passed; no horizontal overflow"
+  },
+  "mobileNavShapeUpdate": {
+    "cause": "Mobile nav width was 30px while inherited height remained 42px; flex shrink was enabled.",
+    "fix": "Equal responsive width/height, flex-shrink disabled, compact spacing and brand/language sizing at <=360px.",
+    "checkedWidths": [
+      320,
+      360,
+      390,
+      480,
+      768,
+      1280
+    ],
+    "homeSizes": {
+      "320/360": "30x30",
+      "390/480": "34x34",
+      "768": "40x40",
+      "1280": "46x46"
+    },
+    "languageSwitch": "passed; both languages fit at 320px",
+    "horizontalOverflow": "none at checked widths",
+    "status": "local follow-up; not pushed or deployed"
+  },
+  "tyreToneUpdate": {
+    "implementation": "Split tyre base, high-pass greyscale rotating detail, fixed tyre reflection, and masked rotating alloy. SVG arithmetic subtracts blurred baked lighting; opacity retains weak grain.",
+    "typecheck": "passed",
+    "cloudflareBuild": "passed",
+    "componentLint": "0 errors; 3 img warnings",
+    "mobile390": "passed; no horizontal overflow",
+    "sameBoundsRotationComparison": {
+      "angles": [
+        0,
+        180
+      ],
+      "fixedSectors": 8,
+      "maximumMeanLumaChange8bit": 2.04,
+      "method": "JPEG screenshots; radius 82\u201392% of assembly half-width; same viewport and assembly bounds; sample mean luma, not a perceptual realism score."
+    },
+    "status": "local follow-up; not pushed or deployed"
   }
 }
