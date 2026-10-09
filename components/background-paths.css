@@ -1,0 +1,39 @@
+.harbour-paths {
+  /* Adjust these three colors to retheme the supplied curves. */
+  --path-gold: #ffd34c;
+  --path-bronze: #9d783b;
+  --path-silver: #a6b5b2;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  opacity: .75;
+  /* Keep SVG stroke repainting inside its own composited background layer. */
+  contain: paint;
+  isolation: isolate;
+  transform: translateZ(0);
+}
+.harbour-paths::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, #151b1ea6, #151b1e38 42%, transparent 72%);
+}
+.harbour-paths-layer {
+  position: absolute;
+  inset: -3%;
+  width: 106%;
+  height: 106%;
+}
+.harbour-paths .layer-1 { opacity: .65; }
+.kw-stage > .kw-wheel-area { position: relative; z-index: 1; }
+.kw-stage > .kw-scroll-hint { z-index: 1; }
+@media(max-width:860px) {
+  .harbour-paths { opacity: .55; }
+  .harbour-paths path:nth-of-type(n+15) { display: none; }
+}
+@media(prefers-reduced-motion:reduce) {
+  .harbour-paths path { stroke-dasharray: none; stroke-dashoffset: 0; }
+  .harbour-paths { opacity: .3; }
+}
