@@ -9,6 +9,7 @@ else if(command==="deploy"){
  const source=JSON.parse(readFileSync("wrangler.cloudflare.json","utf8"));
  const built=JSON.parse(readFileSync("dist/server/wrangler.json","utf8"));
  if(source.d1_databases[0].database_id.startsWith("00000000-") || built.name!==source.name || built.d1_databases[0].database_id!==source.d1_databases[0].database_id)throw Error("Configure a real D1 database and run npm run build:cloudflare first.");
+ for(const namespace of source.kv_namespaces||[]){if(!namespace.id || /^0+$/.test(namespace.id) || !built.kv_namespaces?.some(item=>item.binding===namespace.binding&&item.id===namespace.id))throw Error("Configure the real image KV namespace and rebuild before deploying.");}
  argv=["node_modules/wrangler/bin/wrangler.js","deploy","--config","dist/server/wrangler.json",...args];
 }else throw Error("Use build, dev or deploy.");
 const result=spawnSync(process.execPath,argv,{env,stdio:"inherit"});

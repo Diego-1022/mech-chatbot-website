@@ -15,6 +15,13 @@
       "when": 1791550259913,
       "tag": "0001_lethal_spot",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1791556379509,
+      "tag": "0002_tan_rhino",
+      "breakpoints": true
     }
   ]
 }
