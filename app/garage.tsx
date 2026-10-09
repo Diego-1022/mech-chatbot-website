@@ -1,6 +1,6 @@
 "use client";
 import {useEffect, useRef, useState} from "react";
-import {House, CarFront, Wrench, CalendarDays, UserRound, MessageCircle, Clock3, ShieldCheck, Info, BatteryCharging, ScanLine, CircleDot, Wind} from "lucide-react";
+import {House, CarFront, Wrench, CalendarDays, UserRound, UsersRound, MessageCircle, Clock3, ShieldCheck, Info, BatteryCharging, ScanLine, CircleDot, Wind} from "lucide-react";
 import {services} from "@/lib/catalog";
 import {useLanguage} from "@/lib/client";
 import Booking from "@/components/booking";
@@ -8,6 +8,9 @@ import Chat from "@/components/chat";
 import WheelShowcase from "@/components/wheel-showcase";
 import BackgroundPaths from "@/components/background-paths";
 import ServicesBackground from "@/components/services-background";
+import WorkshopTeam from "@/components/workshop-team";
+import Comments from "@/components/comments";
+import {workshopContact} from "@/lib/workshop-info";
 
 const serviceIcons = [Wrench, ShieldCheck, BatteryCharging, ScanLine, CircleDot, Wind];
 
@@ -79,6 +82,7 @@ export default function Garage() {
       <nav aria-label={t("主导航", "Main navigation")}>
         <a href="#home" aria-label={t("首页", "Home")} className="kw-home"><House size={23}/><span className="kw-tip">{t("首页", "Home")}</span></a>
         <a href="#services" aria-label={t("服务与价格", "Services & prices")}><CarFront size={23}/><span className="kw-tip">{t("服务与价格", "Services & prices")}</span></a>
+        <a href="#team" aria-label={t("维修团队", "Our team")}><UsersRound size={23}/><span className="kw-tip">{t("维修团队", "Our team")}</span></a>
         <a href="#booking" aria-label={t("预约到店", "Book a visit")}><CalendarDays size={23}/><span className="kw-tip">{t("预约到店", "Book a visit")}</span></a>
         <a href="#about" aria-label={t("营业时间", "Workshop information")}><Info size={23}/><span className="kw-tip">{t("营业时间", "Workshop information")}</span></a>
         <a href="/manage" aria-label={t("管理预约", "Manage booking")}><UserRound size={23}/><span className="kw-tip">{t("管理预约", "Manage booking")}</span></a>
@@ -94,7 +98,7 @@ export default function Garage() {
             <div className="kw-dial-caption"><span>0{active+1} / 04</span><span>{titles[active]}</span></div>
           </div>
           <div className="kw-copy">
-            <p className="kw-kicker"><span className="kw-status-dot" aria-hidden="true"/>{t("悉尼 · 课堂演示店铺", "SYDNEY · CLASSROOM WORKSHOP")}</p>
+            <p className="kw-kicker"><span className="kw-status-dot" aria-hidden="true"/>{t("悉尼 · 专注车辆养护", "SYDNEY · AUTOMOTIVE CARE")}</p>
             <div className="kw-panel" key={active}>
               {active===0 ? <>
                 <h1>{t("了解车况。", "Know your car.")}<br/><span className="kw-highlight">{t("从容出发。", "Own the road.")}</span></h1>
@@ -127,16 +131,18 @@ export default function Garage() {
       <section className="kw-services" id="services">
         <ServicesBackground lang={lang}/>
         <div className="services-content">
-        <div className="section-heading"><div><p className="eyebrow">{t("服务与参考费用", "SERVICES & ESTIMATES")}</p><h2>{t("适合你的车辆服务", "The right care for your car.")}</h2></div><p>{t("澳元演示价格，实际维修以检查后报价为准。", "Fictional AUD ranges for this class project. Final quotes require an inspection.")}</p></div>
+        <div className="section-heading"><div><p className="eyebrow">{t("服务与参考费用", "SERVICES & ESTIMATES")}</p><h2>{t("适合你的车辆服务", "The right care for your car.")}</h2></div><p>{t("澳元参考价格。最终维修报价在检查后确认。", "Indicative AUD ranges. Final quotes follow a vehicle inspection.")}</p></div>
         <div className="service-grid">{services.map((s,i)=>{const Icon=serviceIcons[i];return <article className="service-card ui-reveal" key={s.id}><div className="kw-service-top"><Icon size={26}/><span className="service-number">0{i+1}</span></div><h3>{s[lang]}</h3><p>{lang==="zh"?s.detailZh:s.detailEn}</p><div className="price">A$ {s.min}–{s.max}<span>{t("参考区间", "estimate")}</span></div><button className="secondary" onClick={()=>choose(s.id)}>{t("预约此服务", "Book this service")}</button></article>})}</div>
         </div>
       </section>
+      <WorkshopTeam lang={lang}/>
       <section className="kw-booking-section" id="booking">
-        <div className="kw-booking-copy ui-reveal"><p className="eyebrow">{t("安排下一次到店", "YOUR NEXT VISIT")}</p><h2>{t("选好时间。", "Pick a time.")}<br/>{t("我们到时见。", "We'll see you then.")}</h2><p className="kw-lede">{t("选择服务和到店时段，填写车辆资料，再确认预约。", "Choose a service and check-in time, add your vehicle details and review your booking.")}</p><div className="kw-booking-benefits"><p><Clock3 size={22}/>{t("24 小时在线预约", "Online booking, 24 hours a day")}</p><p><ShieldCheck size={22}/>{t("私人链接管理预约", "A private link to manage your visit")}</p></div><p className="small muted">{t("到店接待时段不代表维修完成时间。课堂演示请使用虚构联系资料。", "Appointments reserve a check-in time, not a repair completion time. Use fictional contact details for this class demo.")}</p></div>
+        <div className="kw-booking-copy ui-reveal"><p className="eyebrow">{t("安排下一次到店", "YOUR NEXT VISIT")}</p><h2>{t("选好时间。", "Pick a time.")}<br/>{t("我们到时见。", "We'll see you then.")}</h2><p className="kw-lede">{t("选择服务和到店时段，填写车辆资料，再确认预约。", "Choose a service and check-in time, add your vehicle details and review your booking.")}</p><div className="kw-booking-benefits"><p><Clock3 size={22}/>{t("24 小时在线预约", "Online booking, 24 hours a day")}</p><p><ShieldCheck size={22}/>{t("私人链接管理预约", "A private link to manage your visit")}</p></div><p className="small muted">{t("到店接待时段不代表维修完成时间。", "Appointments reserve a check-in time, not a repair completion time.")}</p></div>
         <div className="booking-card ui-reveal"><h3>{t("预约到店", "Book your visit")}</h3><div className="summary"><CalendarDays size={22}/><div><b>{t("悉尼当地时间", "Sydney local time")}</b><p>{t("周一至周五 09:00–17:00 · 周六 09:00–12:00", "Mon–Fri 09:00–17:00 · Sat 09:00–12:00")}</p></div></div><Booking lang={lang} initialService={chosen}/></div>
       </section>
     </main>
-    <footer className="kw-footer" id="about"><div><strong>Harbour Auto Workshop</strong><p>{t("车辆咨询、参考费用和在线预约。", "Car care advice, indicative estimates and online appointments.")}</p><p className="kw-demo-note">{t("课堂演示项目 · 店铺与价格为模拟资料", "Classroom project · fictional workshop and pricing")}</p></div><div><strong>{t("营业时间", "Workshop hours")}</strong><p>{t("周一至周五 09:00–17:00", "Monday–Friday 09:00–17:00")}<br/>{t("周六 09:00–12:00 · 周日休息", "Saturday 09:00–12:00 · Sunday closed")}</p><p>{t("悉尼时间 · 无真实营业地址或电话", "Sydney time · no real trading address or phone")}</p></div><div><strong>{t("在线服务", "Your workshop, online")}</strong><a href="#booking">{t("预约到店", "Book a visit")}</a><a href="/manage">{t("管理预约", "Manage booking")}</a><a href="/admin">{t("店铺管理", "Workshop admin")}</a></div></footer>
+    <footer className="kw-footer" id="about"><div><strong>Harbour Auto Workshop</strong><p>{t("车辆咨询、参考费用和在线预约。", "Car care advice, indicative estimates and online appointments.")}</p><p>{workshopContact.location}<br/>{workshopContact.address}</p><a href={workshopContact.phoneHref}>{workshopContact.phone}</a><a href={workshopContact.mapUrl} target="_blank" rel="noopener noreferrer">{t("查看地图", "Find us on the map")}</a></div><div><strong>{t("营业时间", "Workshop hours")}</strong><p>{t("周一至周五 09:00–17:00", "Monday–Friday 09:00–17:00")}<br/>{t("周六 09:00–12:00 · 周日休息", "Saturday 09:00–12:00 · Sunday closed")}</p><p>{t("悉尼当地时间", "Sydney local time")}</p></div><div><strong>{t("在线服务", "Your workshop, online")}</strong><a href="#team">{t("认识维修团队", "Meet our team")}</a><a href="#booking">{t("预约到店", "Book a visit")}</a><a href="#comments">{t("留言与反馈", "Messages & feedback")}</a><a href="/manage">{t("管理预约", "Manage booking")}</a><a href="/admin">{t("店铺管理", "Workshop admin")}</a></div></footer>
+    <Comments lang={lang}/>
     <Chat open={chat} setOpen={setChat} lang={lang}/>
   </>;
 }

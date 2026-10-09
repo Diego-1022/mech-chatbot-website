@@ -12,5 +12,5 @@ export function quickReply(message:string,lang:Lang,history:string[]=[]){
  const priceOnly=/^(service prices|service price|how much is a service|保养多少钱|保养价格)$/.test(m);
  if(!priceOnly)return null;
  const s=services[0];
- return {reply:lang==="zh"?"常规保养包括机油与滤芯更换和基础车辆检查。下方为课堂演示参考价格，具体项目、零件与人工需到店检查后确认。":"Essential service includes an oil and filter change and basic vehicle checks. The card shows a fictional classroom estimate; final scope, parts and labour are confirmed after inspection.",service:s.id,mode:"guide" as const,reason:"faq",estimate:{min:s.min,max:s.max,currency:"AUD",service:s.id}};
+ return {reply:lang==="zh"?"常规保养包括机油与滤芯更换和基础车辆检查。下方为参考价格，具体项目、零件与人工需到店检查后确认。":"Essential service includes an oil and filter change and basic vehicle checks. The card shows an indicative estimate; final scope, parts and labour are confirmed after inspection.",service:s.id,mode:"guide" as const,reason:"faq",estimate:{min:s.min,max:s.max,currency:"AUD",service:s.id}};
 }

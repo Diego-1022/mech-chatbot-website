@@ -5,5 +5,14 @@
     "source": "public/wheel-photoreal-v2.png",
     "output": "public/wheel-neutral-v3.png",
     "prompt": "Use case: lighting-weather. Asset type: transparent rotating tyre-and-rim foreground for an existing automotive website. Input Image 1 is the EDIT TARGET. Change ONLY the baked lighting and reflectivity of this exact wheel. Preserve the same black rubber tyre, tread geometry, split ten-spoke alloy rim, lug bolts, dimensions, front orthographic camera, centered circular silhouette and transparent outside and spoke openings. Remove the broad top-versus-bottom / left-versus-right brightness difference on the tyre; make rubber uniformly charcoal with softly visible tread texture. Remove sharp directional specular bands and white hotspots from the metal spokes and central hub. Make the metal a medium gunmetal satin finish lit by very broad, uniform coaxial diffuse illumination, so every repeated spoke has equal brightness. Small local bevel and cavity shading may remain, but no single off-axis light source, no directional brushed swirl on the center hub, no bright upper edge, no luminous streaks. Intended use: the wheel image rotates while a separate stationary lighting overlay will supply highlights, so this is a neutral material/base-color layer with minimal baked highlights. Keep the photographic material detail and exact existing design. Keep all spoke gaps genuinely fully transparent, no brake disc or caliper; preserve alpha transparency. No text, logos, added objects, floor or background."
+  },
+  "workshopTeam": {
+    "output": "public/media/workshop-team.jpg",
+    "generator": "built-in image_gen",
+    "source": "generated fictional team photo, three characters",
+    "created_date_sydney": "2026-10-09",
+    "prompt": "Use case: photorealistic-natural. Wide editorial group photograph for a fictional automotive workshop website. Exactly three fictional male mechanics, evenly spaced, waist up. Left: senior around 56 with short silver-grey hair and subtle stubble. Centre: mid-career around 38 with short dark hair. Right: apprentice around 22 with a youthful face and short dark hair. Matching charcoal work shirts with small unbranded yellow accents. Tidy blurred graphite workshop, soft natural window light, realistic skin texture, relaxed natural poses. Landscape composition, generous headroom, three equally prominent people. No celebrities, logos, lettering, watermarks, university insignia or extra people.",
+    "encoding": "JPEG quality 82; original generated PNG preserved outside Git",
+    "sha256": "3183d0e342c3d0a1ec19756e0312c6cd33d32dc002ebad379170c68d3b2c64f9"
   }
 }
