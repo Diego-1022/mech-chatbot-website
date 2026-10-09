@@ -7,6 +7,7 @@ import Booking from "@/components/booking";
 import Chat from "@/components/chat";
 import WheelShowcase from "@/components/wheel-showcase";
 import BackgroundPaths from "@/components/background-paths";
+import ServicesBackground from "@/components/services-background";
 
 const serviceIcons = [Wrench, ShieldCheck, BatteryCharging, ScanLine, CircleDot, Wind];
 
@@ -124,8 +125,11 @@ export default function Garage() {
       </section>
       <div className="kw-assurance-bar"><span><Clock3 size={16}/>{t("全天在线预约", "Book online, anytime")}</span><span><ShieldCheck size={16}/>{t("透明参考价格", "Clear, indicative pricing")}</span><span><MessageCircle size={16}/>{t("英文与中文支持", "English & 中文")}</span></div>
       <section className="kw-services" id="services">
+        <ServicesBackground lang={lang}/>
+        <div className="services-content">
         <div className="section-heading"><div><p className="eyebrow">{t("服务与参考费用", "SERVICES & ESTIMATES")}</p><h2>{t("适合你的车辆服务", "The right care for your car.")}</h2></div><p>{t("澳元演示价格，实际维修以检查后报价为准。", "Fictional AUD ranges for this class project. Final quotes require an inspection.")}</p></div>
         <div className="service-grid">{services.map((s,i)=>{const Icon=serviceIcons[i];return <article className="service-card ui-reveal" key={s.id}><div className="kw-service-top"><Icon size={26}/><span className="service-number">0{i+1}</span></div><h3>{s[lang]}</h3><p>{lang==="zh"?s.detailZh:s.detailEn}</p><div className="price">A$ {s.min}–{s.max}<span>{t("参考区间", "estimate")}</span></div><button className="secondary" onClick={()=>choose(s.id)}>{t("预约此服务", "Book this service")}</button></article>})}</div>
+        </div>
       </section>
       <section className="kw-booking-section" id="booking">
         <div className="kw-booking-copy ui-reveal"><p className="eyebrow">{t("安排下一次到店", "YOUR NEXT VISIT")}</p><h2>{t("选好时间。", "Pick a time.")}<br/>{t("我们到时见。", "We'll see you then.")}</h2><p className="kw-lede">{t("选择服务和到店时段，填写车辆资料，再确认预约。", "Choose a service and check-in time, add your vehicle details and review your booking.")}</p><div className="kw-booking-benefits"><p><Clock3 size={22}/>{t("24 小时在线预约", "Online booking, 24 hours a day")}</p><p><ShieldCheck size={22}/>{t("私人链接管理预约", "A private link to manage your visit")}</p></div><p className="small muted">{t("到店接待时段不代表维修完成时间。课堂演示请使用虚构联系资料。", "Appointments reserve a check-in time, not a repair completion time. Use fictional contact details for this class demo.")}</p></div>
