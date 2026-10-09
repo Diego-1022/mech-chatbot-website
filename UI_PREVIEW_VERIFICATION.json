@@ -1,0 +1,54 @@
+{
+  "dateSydney": "2026-10-09",
+  "status": "local visual preview; not deployed",
+  "selectedDirection": "sporty graphite, larger wheel, yellow accents",
+  "changedOriginalFiles": [
+    "app/garage.tsx",
+    "app/layout.tsx",
+    "components/booking.tsx"
+  ],
+  "typecheck": "passed",
+  "cloudflareBuild": "passed",
+  "browserChecks": {
+    "desktopForwardReverseScroll": "passed",
+    "caliperStationary": "passed",
+    "transparentWheelGaps": "passed",
+    "mobile390": "passed",
+    "narrow320NoOverflow": "passed",
+    "languageSwitch": "passed",
+    "localBookingCreateManageRescheduleCancel": "passed; fictional local record cancelled",
+    "finalBookingProgressIndicator": "passed",
+    "chatDialogOpen": "passed"
+  },
+  "notVerified": [
+    "live AI with new UI",
+    "authenticated admin workflow",
+    "system reduced-motion browser preference",
+    "cross-browser engines",
+    "measured mobile loading performance"
+  ],
+  "productionChanged": false,
+  "githubChanged": false,
+  "backgroundUpdate": {
+    "source": "owner-supplied animated curves",
+    "implementation": "SVG stroke dash length/offset/opacity via requestAnimationFrame, limited to 30 fps; 20\u201330 s staggered cycles; no added dependency",
+    "colors": [
+      "#ffd34c",
+      "#9d783b",
+      "#a6b5b2"
+    ],
+    "browserChecks": {
+      "desktopAppearance": "passed",
+      "mobile390AppearanceNoOverflow": "passed",
+      "onScreenAnimation": "passed; dash length and offset changed between samples; foreground remains visible",
+      "offScreenPause": "passed",
+      "pointerEvents": "none"
+    },
+    "reducedMotion": "implemented; source verified only"
+  },
+  "lintChangedFiles": {
+    "errors": 8,
+    "warnings": 3,
+    "comparisonToMain": "All eight errors exist in main; the two img warnings move from garage.tsx to wheel-showcase.tsx. No additional errors or warning count increase."
+  }
+}

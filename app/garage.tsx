@@ -1,12 +1,13 @@
 "use client";
 import {useEffect, useRef, useState} from "react";
-import {House, CarFront, Wrench, Settings, CalendarDays, UserRound, MessageCircle, Clock3, ShieldCheck, Info, BatteryCharging, ScanLine, CircleDot, Wind} from "lucide-react";
+import {House, CarFront, Wrench, CalendarDays, UserRound, MessageCircle, Clock3, ShieldCheck, Info, BatteryCharging, ScanLine, CircleDot, Wind} from "lucide-react";
 import {services} from "@/lib/catalog";
 import {useLanguage} from "@/lib/client";
 import Booking from "@/components/booking";
 import Chat from "@/components/chat";
+import WheelShowcase from "@/components/wheel-showcase";
+import BackgroundPaths from "@/components/background-paths";
 
-const dialIcons = [House, ScanLine, ShieldCheck, Settings];
 const serviceIcons = [Wrench, ShieldCheck, BatteryCharging, ScanLine, CircleDot, Wind];
 
 export default function Garage() {
@@ -14,7 +15,10 @@ export default function Garage() {
   const [chat, setChat] = useState(false);
   const [chosen, setChosen] = useState("service");
   const [active, setActive] = useState(0);
-  const [rotation, setRotation] = useState(0);
+  const wheelArea = useRef<HTMLDivElement>(null);
+  function setRotation(degrees:number) {
+    wheelArea.current?.style.setProperty("--wheel-rotation", `${degrees}deg`);
+  }
   const [compact, setCompact] = useState(false);
   const track = useRef<HTMLElement>(null);
   const stage = useRef<HTMLDivElement>(null);
@@ -49,6 +53,17 @@ export default function Garage() {
     return () => {cancelAnimationFrame(frame); query.removeEventListener("change",mode); window.removeEventListener("scroll",schedule); window.removeEventListener("resize",schedule);};
   }, []);
   useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || !("IntersectionObserver" in window)) return;
+    const observer = new IntersectionObserver(entries => {
+      for (const entry of entries) if (entry.isIntersecting) {
+        entry.target.classList.add("is-visible");
+        observer.unobserve(entry.target);
+      }
+    }, { threshold: 0.12 });
+    document.querySelectorAll(".ui-reveal").forEach(element => observer.observe(element));
+    return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
     const context = (document as any).modelContext;
     if (!context?.registerTool) return;
     const lifecycle = new AbortController();
@@ -59,7 +74,7 @@ export default function Garage() {
   return <>
     <a className="skip-link" href="#booking">{t("跳转到预约", "Skip to booking")}</a>
     <header className="kw-ribbon">
-      <a className="kw-brand" href="/">Harbour<span> Auto Workshop</span></a>
+      <a className="kw-brand" href="/"><span className="kw-brand-symbol" aria-hidden="true">H<span> /</span></span><span className="kw-brand-name">Harbour<span> AUTO WORKSHOP</span></span></a>
       <nav aria-label={t("主导航", "Main navigation")}>
         <a href="#home" aria-label={t("首页", "Home")} className="kw-home"><House size={23}/><span className="kw-tip">{t("首页", "Home")}</span></a>
         <a href="#services" aria-label={t("服务与价格", "Services & prices")}><CarFront size={23}/><span className="kw-tip">{t("服务与价格", "Services & prices")}</span></a>
@@ -72,19 +87,16 @@ export default function Garage() {
     <main>
       <section id="home" className={"kw-track"+(compact?" is-compact":"")} ref={track} aria-label={t("车辆服务介绍", "Explore car care")}>
         <div className="kw-stage" ref={stage}>
-          <div className="kw-wheel-area">
-            <div className="kw-wheel">
-              <img className="kw-wheel-rotor" src="/kingsway-wheel-rotor.svg" alt="" width="592" height="592" style={{transform:`rotate(${rotation}deg)`}}/>
-              <img className="kw-wheel-fixed" src="/kingsway-wheel-fixed.svg" alt="" width="592" height="592"/>
-              {dialIcons.map((Icon,i)=>{const radians=(rotation-i*90)*Math.PI/180;return <button key={i} type="button" className={"kw-marker"+(active===i?" active":"")} style={{left:`${50+38.2*Math.cos(radians)}%`,top:`${50+38.2*Math.sin(radians)}%`}} aria-label={titles[i]} aria-pressed={active===i} onClick={()=>goToPanel(i)}><Icon size={23}/></button>;})}
-            </div>
+          <BackgroundPaths/>
+          <div className="kw-wheel-area" ref={wheelArea}>
+            <WheelShowcase active={active} titles={titles} onSelect={goToPanel}/>
             <div className="kw-dial-caption"><span>0{active+1} / 04</span><span>{titles[active]}</span></div>
           </div>
           <div className="kw-copy">
-            <p className="kw-kicker">{t("悉尼 · 课堂演示店铺", "SYDNEY · CLASSROOM WORKSHOP")}</p>
+            <p className="kw-kicker"><span className="kw-status-dot" aria-hidden="true"/>{t("悉尼 · 课堂演示店铺", "SYDNEY · CLASSROOM WORKSHOP")}</p>
             <div className="kw-panel" key={active}>
               {active===0 ? <>
-                <h1>{t("了解车况。", "Know your car.")}<br/>{t("了解费用。", "Know the cost.")}<br/>{t("轻松预约。", "Book with ease.")}</h1>
+                <h1>{t("了解车况。", "Know your car.")}<br/><span className="kw-highlight">{t("从容出发。", "Own the road.")}</span></h1>
                 <p className="kw-lede">{t("从日常保养到故障排查，先了解服务与参考费用，再安排到店检查。", "From routine servicing to a worrying warning light. Explore your options, get an indicative estimate and plan your next visit.")}</p>
                 <div className="actions"><button className="primary" onClick={()=>choose("service")}><CalendarDays size={18}/>{t("预约到店", "Book a visit")}</button><button className="secondary" onClick={()=>setChat(true)}><MessageCircle size={18}/>{t("咨询助手", "Ask the assistant")}</button></div>
               </> : active===1 ? <>
@@ -104,18 +116,20 @@ export default function Garage() {
                 <div className="actions"><button className="primary" onClick={()=>choose("service")}>{t("预约常规保养", "Book a service")}</button><a className="secondary" href="/manage">{t("管理预约", "Manage booking")}</a></div>
               </>}
             </div>
+            <div className="kw-topic-label">{t("探索车辆养护", "EXPLORE CAR CARE")}<span>0{active+1} / 04</span></div>
             <div className="kw-section-tabs" aria-label={t("选择服务介绍", "Choose a care topic")}>{titles.map((label,i)=><button key={i} aria-pressed={active===i} onClick={()=>goToPanel(i)}>{label}</button>)}</div>
           </div>
           {!compact&&<p className="kw-scroll-hint">{t("滚动了解服务", "Scroll to explore")}</p>}
         </div>
       </section>
+      <div className="kw-assurance-bar"><span><Clock3 size={16}/>{t("全天在线预约", "Book online, anytime")}</span><span><ShieldCheck size={16}/>{t("透明参考价格", "Clear, indicative pricing")}</span><span><MessageCircle size={16}/>{t("英文与中文支持", "English & 中文")}</span></div>
       <section className="kw-services" id="services">
         <div className="section-heading"><div><p className="eyebrow">{t("服务与参考费用", "SERVICES & ESTIMATES")}</p><h2>{t("适合你的车辆服务", "The right care for your car.")}</h2></div><p>{t("澳元演示价格，实际维修以检查后报价为准。", "Fictional AUD ranges for this class project. Final quotes require an inspection.")}</p></div>
-        <div className="service-grid">{services.map((s,i)=>{const Icon=serviceIcons[i];return <article className="service-card" key={s.id}><div className="kw-service-top"><Icon size={26}/><span className="service-number">0{i+1}</span></div><h3>{s[lang]}</h3><p>{lang==="zh"?s.detailZh:s.detailEn}</p><div className="price">A$ {s.min}–{s.max}<span>{t("参考区间", "estimate")}</span></div><button className="secondary" onClick={()=>choose(s.id)}>{t("预约此服务", "Book this service")}</button></article>})}</div>
+        <div className="service-grid">{services.map((s,i)=>{const Icon=serviceIcons[i];return <article className="service-card ui-reveal" key={s.id}><div className="kw-service-top"><Icon size={26}/><span className="service-number">0{i+1}</span></div><h3>{s[lang]}</h3><p>{lang==="zh"?s.detailZh:s.detailEn}</p><div className="price">A$ {s.min}–{s.max}<span>{t("参考区间", "estimate")}</span></div><button className="secondary" onClick={()=>choose(s.id)}>{t("预约此服务", "Book this service")}</button></article>})}</div>
       </section>
       <section className="kw-booking-section" id="booking">
-        <div className="kw-booking-copy"><p className="eyebrow">{t("安排下一次到店", "YOUR NEXT VISIT")}</p><h2>{t("选好时间。", "Pick a time.")}<br/>{t("我们到时见。", "We'll see you then.")}</h2><p className="kw-lede">{t("选择服务和到店时段，填写车辆资料，再确认预约。", "Choose a service and check-in time, add your vehicle details and review your booking.")}</p><div className="kw-booking-benefits"><p><Clock3 size={22}/>{t("24 小时在线预约", "Online booking, 24 hours a day")}</p><p><ShieldCheck size={22}/>{t("私人链接管理预约", "A private link to manage your visit")}</p></div><p className="small muted">{t("到店接待时段不代表维修完成时间。课堂演示请使用虚构联系资料。", "Appointments reserve a check-in time, not a repair completion time. Use fictional contact details for this class demo.")}</p></div>
-        <div className="booking-card"><h3>{t("预约到店", "Book your visit")}</h3><div className="summary"><CalendarDays size={22}/><div><b>{t("悉尼当地时间", "Sydney local time")}</b><p>{t("周一至周五 09:00–17:00 · 周六 09:00–12:00", "Mon–Fri 09:00–17:00 · Sat 09:00–12:00")}</p></div></div><Booking lang={lang} initialService={chosen}/></div>
+        <div className="kw-booking-copy ui-reveal"><p className="eyebrow">{t("安排下一次到店", "YOUR NEXT VISIT")}</p><h2>{t("选好时间。", "Pick a time.")}<br/>{t("我们到时见。", "We'll see you then.")}</h2><p className="kw-lede">{t("选择服务和到店时段，填写车辆资料，再确认预约。", "Choose a service and check-in time, add your vehicle details and review your booking.")}</p><div className="kw-booking-benefits"><p><Clock3 size={22}/>{t("24 小时在线预约", "Online booking, 24 hours a day")}</p><p><ShieldCheck size={22}/>{t("私人链接管理预约", "A private link to manage your visit")}</p></div><p className="small muted">{t("到店接待时段不代表维修完成时间。课堂演示请使用虚构联系资料。", "Appointments reserve a check-in time, not a repair completion time. Use fictional contact details for this class demo.")}</p></div>
+        <div className="booking-card ui-reveal"><h3>{t("预约到店", "Book your visit")}</h3><div className="summary"><CalendarDays size={22}/><div><b>{t("悉尼当地时间", "Sydney local time")}</b><p>{t("周一至周五 09:00–17:00 · 周六 09:00–12:00", "Mon–Fri 09:00–17:00 · Sat 09:00–12:00")}</p></div></div><Booking lang={lang} initialService={chosen}/></div>
       </section>
     </main>
     <footer className="kw-footer" id="about"><div><strong>Harbour Auto Workshop</strong><p>{t("车辆咨询、参考费用和在线预约。", "Car care advice, indicative estimates and online appointments.")}</p><p className="kw-demo-note">{t("课堂演示项目 · 店铺与价格为模拟资料", "Classroom project · fictional workshop and pricing")}</p></div><div><strong>{t("营业时间", "Workshop hours")}</strong><p>{t("周一至周五 09:00–17:00", "Monday–Friday 09:00–17:00")}<br/>{t("周六 09:00–12:00 · 周日休息", "Saturday 09:00–12:00 · Sunday closed")}</p><p>{t("悉尼时间 · 无真实营业地址或电话", "Sydney time · no real trading address or phone")}</p></div><div><strong>{t("在线服务", "Your workshop, online")}</strong><a href="#booking">{t("预约到店", "Book a visit")}</a><a href="/manage">{t("管理预约", "Manage booking")}</a><a href="/admin">{t("店铺管理", "Workshop admin")}</a></div></footer>
