@@ -5,6 +5,11 @@
   --path-silver: #a6b5b2;
   position: absolute;
   inset: 0;
+  /* The hero content stops at 1600px; its decorative background must reach
+     both viewport edges even on wider displays. The track clips overscan. */
+  left: 50%;
+  right: auto;
+  width: 100vw;
   z-index: 0;
   pointer-events: none;
   overflow: hidden;
@@ -12,7 +17,7 @@
   /* Keep SVG stroke repainting inside its own composited background layer. */
   contain: paint;
   isolation: isolate;
-  transform: translateZ(0);
+  transform: translateX(-50%) translateZ(0);
 }
 .harbour-paths::after {
   content: "";
@@ -22,9 +27,10 @@
 }
 .harbour-paths-layer {
   position: absolute;
-  inset: -3%;
-  width: 106%;
-  height: 106%;
+  /* Keep the curve ends outside the visible frame as the strokes grow. */
+  inset: -6%;
+  width: 112%;
+  height: 112%;
 }
 .harbour-paths .layer-1 { opacity: .65; }
 .kw-stage > .kw-wheel-area { position: relative; z-index: 1; }
