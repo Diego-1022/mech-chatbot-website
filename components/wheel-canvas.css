@@ -1,0 +1,14 @@
+.kw-wheel .wheel-webgl {
+  position: absolute;
+  inset: 4.5%;
+  width: 91%;
+  height: 91%;
+  display: block;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 1;
+}
+.kw-wheel[data-renderer=webgl] .wheel-webgl { opacity: 1; }
+.kw-wheel[data-renderer=webgl] .wheel-assembly { display: none; }
+/* Orbit/topic buttons stay as real keyboard-accessible HTML controls. */
+.kw-wheel .kw-marker { z-index: 2; }
