@@ -1,6 +1,7 @@
 import {z} from "zod";
 import {database} from "@/db";
 import {AccountProblem,accountRate,cookie,currentCustomer,customerToken,digest,newSession,passwordHash,passwordMatches,sameOrigin} from "@/lib/customer-session";
+import {DUMMY_PASSWORD_HASH} from "@/lib/customer-password";
 export const dynamic="force-dynamic";
 const json=(data:unknown,status=200,session?:string)=>Response.json(data,{status,headers:{"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff",...(session?{"Set-Cookie":session}:{})}});
 const credentials=z.object({email:z.string().trim().email().max(150).transform(v=>v.toLowerCase()),password:z.string().min(12).max(128)});
@@ -50,7 +51,7 @@ export async function POST(request:Request) {return run(async()=>{
   }
   const user=await database().prepare("SELECT id,name,email,password_hash FROM customers WHERE email=?").bind(data.email).first<{id:string;name:string;email:string;password_hash:string}>();
   // A fixed, valid dummy encoding keeps unknown-email checks equally expensive.
-  const valid=await passwordMatches(data.password,user?.password_hash||"pbkdf2-sha256$600000$00000000000000000000000000000000$0000000000000000000000000000000000000000000000000000000000000000");
+  const valid=await passwordMatches(data.password,user?.password_hash||DUMMY_PASSWORD_HASH);
   if(!user||!valid)throw new AccountProblem("INVALID_CREDENTIALS",401);
   return json({user:{id:user.id,name:user.name,email:user.email}},200,await newSession(user.id,request));
 });}

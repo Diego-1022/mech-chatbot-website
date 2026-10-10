@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {passwordHash,passwordMatches,DUMMY_PASSWORD_HASH} from '../lib/customer-password.ts';
+const password='Unicode test 🔧 密码 12+ characters';
+const one=await passwordHash(password),two=await passwordHash(password);
+assert.notEqual(one,two,'Independent random salts');
+assert.match(one,/^scrypt\$16384\$8\$5\$[a-f0-9]{32}\$[a-f0-9]{64}$/,'Bounded encoded cost and salt');
+assert.ok(await passwordMatches(password,one),'Correct Unicode password matches');
+assert.ok(!await passwordMatches(password+'x',one),'Wrong password rejected');
+assert.ok(!await passwordMatches(password,DUMMY_PASSWORD_HASH),'Dummy unknown-user hash rejected');
+assert.ok(!await passwordMatches(password,'scrypt$999999999$8$5$bad$hash'),'Corrupt or excessive cost rejected');
+assert.ok(!one.includes(password),'No plaintext in stored verifier');
+console.log('7 customer-password checks passed; no credentials or hashes printed.');
