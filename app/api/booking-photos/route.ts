@@ -3,6 +3,7 @@ import { z } from "zod";
 import { database } from "@/db";
 import { getChatGPTUser } from "@/app/chatgpt-auth";
 import { MAX_PHOTO_BYTES, PHOTO_TYPES, detectPhotoMime, mimeMatches, readPhotoBody, PhotoError, type BookingPhoto } from "@/lib/booking-photos";
+import {currentCustomer} from "@/lib/customer-session";
 export const dynamic = "force-dynamic";
 const privateHeaders = { "Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff" };
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: privateHeaders });
@@ -12,8 +13,12 @@ type StoredPhoto = BookingPhoto & { storage_key: string; status: string; upload_
 async function digest(value: string) { return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))), n => n.toString(16).padStart(2, "0")).join(""); }
 async function customer(request: Request, id: string) {
   const credential = request.headers.get("authorization")?.replace(/^Bearer /, "") || "";
-  if (!token.safeParse(credential).success) return null;
-  return database().prepare("SELECT id,status FROM bookings WHERE id=? AND token_hash=? AND status!='blocked'").bind(id, await digest(credential)).first<{ id: string; status: string }>();
+  if (token.safeParse(credential).success) {
+    const row=await database().prepare("SELECT id,status FROM bookings WHERE id=? AND token_hash=? AND status!='blocked'").bind(id, await digest(credential)).first<{id:string;status:string}>();
+    if(row)return row;
+  }
+  const user=await currentCustomer(request);
+  return user?database().prepare("SELECT id,status FROM bookings WHERE id=? AND customer_id=? AND status!='blocked'").bind(id,user.id).first<{id:string;status:string}>():null;
 }
 async function authorisedReader(request: Request, id: string) {
   if (await customer(request, id)) return true;
