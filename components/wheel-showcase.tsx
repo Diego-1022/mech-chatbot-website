@@ -2,6 +2,7 @@
 
 import { House, ScanLine, ShieldCheck, Settings } from "lucide-react";
 import { useId } from "react";
+import WheelCanvas from "./wheel-canvas";
 
 const icons = [House, ScanLine, ShieldCheck, Settings];
 
@@ -41,6 +42,7 @@ export default function WheelShowcase({ active, titles, onSelect }: {
       <div className="wheel-material-light"><div className="wheel-fixed-rim-light" /></div>
       <div className="wheel-tyre-light" />
     </div>
+    <WheelCanvas />
     {icons.map((Icon, i) => {
       const radians = (i * 90 - 90) * Math.PI / 180;
       return <button key={i} type="button" className={"kw-marker" + (active === i ? " active" : "")}

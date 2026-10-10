@@ -19,6 +19,7 @@ export default function Garage() {
   const wheelArea = useRef<HTMLDivElement>(null);
   function setRotation(degrees:number) {
     wheelArea.current?.style.setProperty("--wheel-rotation", `${degrees}deg`);
+    wheelArea.current?.dispatchEvent(new CustomEvent("harbour-wheel-rotate", {detail:degrees}));
   }
   const [compact, setCompact] = useState(false);
   const track = useRef<HTMLElement>(null);
