@@ -1,27 +1,15 @@
-import {pbkdf2, randomBytes, timingSafeEqual} from "node:crypto";
+import {randomBytes} from "node:crypto";
 import {database} from "@/db";
 
 const COOKIE = "harbour_customer";
 const DAYS = 7 * 86400;
-const ITERATIONS = 600000;
+export {passwordHash,passwordMatches} from "./customer-password";
 export type Customer = {id:string;name:string;email:string};
 export class AccountProblem extends Error {
   constructor(public code:string, public status=400) {super(code);}
 }
 export async function digest(value:string) {
   return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(value))),n=>n.toString(16).padStart(2,"0")).join("");
-}
-function derive(password:string,salt:string) {
-  return new Promise<Buffer>((resolve,reject)=>pbkdf2(password,salt,ITERATIONS,32,"sha256",(error,key)=>error?reject(error):resolve(key)));
-}
-export async function passwordHash(password:string) {
-  const salt=randomBytes(16).toString("hex");
-  return `pbkdf2-sha256$${ITERATIONS}$${salt}$${(await derive(password,salt)).toString("hex")}`;
-}
-export async function passwordMatches(password:string,stored:string) {
-  const [algorithm,rounds,salt,hash]=stored.split("$");
-  if(algorithm!=="pbkdf2-sha256"||rounds!==String(ITERATIONS)||!/^[a-f0-9]{32}$/.test(salt)||!/^[a-f0-9]{64}$/.test(hash))return false;
-  return timingSafeEqual(await derive(password,salt),Buffer.from(hash,"hex"));
 }
 export function customerToken(request:Request) {
   const token=request.headers.get("cookie")?.split(";").map(v=>v.trim()).find(v=>v.startsWith(COOKIE+"="))?.slice(COOKIE.length+1)||"";

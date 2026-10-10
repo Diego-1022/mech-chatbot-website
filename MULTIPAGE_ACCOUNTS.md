@@ -14,7 +14,7 @@ Apply additive migration `0003_cultured_norman_osborn.sql` before deploying acco
 
 `/api/account`: GET returns current user, up to 100 owned bookings and latest 60 chat messages, or empty guest state. POST handles signup, login, logout and clearing the current user's history. Origin checks, bounded JSON bodies and 15-minute IP limits protect mutations. Customer and administrator sessions are independent.
 
-Passwords are salted PBKDF2-HMAC-SHA256 with 600,000 iterations using native `node:crypto` (verified in the local Workers runtime). Sessions use random 256-bit tokens, SHA-256 hashes in D1, a seven-day expiry and an HttpOnly, SameSite=Lax cookie with Secure on HTTPS. Plaintext credentials never appear in responses, logs, source or release records.
+Passwords use native `node:crypto` scrypt with N=16384, r=8, p=5 (the OWASP 16MiB profile), independent 128-bit salts and constant-time verification. Hosted Workers rejected the initial PBKDF2 600,000-round implementation despite local workerd accepting it; a remote preview reproduced the hosted 100,000-round cap and verified this scrypt profile. The initial deployment created no customer accounts before this correction. Sessions use random 256-bit tokens, SHA-256 hashes in D1, a seven-day expiry and an HttpOnly, SameSite=Lax cookie with Secure on HTTPS. Plaintext credentials never appear in responses, logs, source or release records.
 
 New bookings use the server-verified session owner, never a supplied customer ID or email lookup. Token retries retain original ownership. `/manage?id=<id>` and private photo endpoints accept the owning customer session as well as the original private bearer token; unrelated sessions receive 404. Existing admin access remains independent. The original 2-photo/20MB-per-file limits remain.
 
@@ -23,6 +23,8 @@ Chat exchanges are recorded server-side after a generated/guide response, only f
 Email verification, self-service password recovery and a 3D wheel rebuild are deferred. Do not automatically claim past bookings by email without verified proof of ownership.
 
 ## Checks
+
+`node scripts/check-customer-passwords.mjs` checks encoding, independent salts, Unicode, malformed costs and matching.
 
 `node scripts/check-accounts.mjs http://127.0.0.1:5174` runs local synthetic signup/login, origin/body/rate limits, session revocation, booking/photo/history isolation, legacy private access and direct-route checks. It rejects production targets and makes no paid AI requests. Existing community and booking-photo checks remain required for their affected paths. Temporary local fixtures and credentials must stay outside Git and be stripped from deployment output.
 
