@@ -1,7 +1,7 @@
 "use client";
 import {useState,useEffect,useRef} from "react";import {Check,CalendarDays,Copy} from "lucide-react";
 import {Select,SelectTrigger,SelectValue,SelectContent,SelectItem} from "@/components/ui/select";
-import {services,Lang,todaySydney,datePlus,serviceName} from "@/lib/catalog";import {api,errorText} from "@/lib/client";
+import {services,Lang,todaySydney,datePlus,nextBookingDate,serviceName} from "@/lib/catalog";import {api,errorText} from "@/lib/client";
 import {englishCharacters,validEnglishDetails} from "@/lib/booking-input";
 import {PhotoSelection,PhotoReview,PhotoGallery,type SelectedPhoto} from "@/components/booking-photos";
 import {photoMime,photoErrorText,type BookingPhoto} from "@/lib/booking-photos";
@@ -12,7 +12,7 @@ export function SlotPicker({date,setDate,time,setTime,lang,refresh=0}:{date:stri
  return <><label className="field">{t("到店日期","Visit date")}<input type="date" value={date} min={todaySydney()} max={datePlus(todaySydney(),60)} onChange={e=>{setDate(e.target.value);setTime("")}} required/></label><p className="small muted">{t("可用到店时段 · 悉尼时间","Available check-in times · Sydney time")}</p>{loading?<p className="notice" role="status">{t("正在查询空闲时间…","Checking availability…")}</p>:error?<p className="error" role="alert">{errorText(error,lang)}</p>:slots.length?<div className="slots" aria-label={t("选择到店时间","Choose a time")}>{slots.map(s=><button type="button" aria-pressed={time===s} className={"slot "+(time===s?"active":"")} key={s} onClick={()=>setTime(s)}>{s}</button>)}</div>:<p className="notice">{t("当天已约满或不营业，请选择其他日期。","No available appointments on this day. Please choose another date.")}</p>}</>;
 }
 export default function Booking({lang,initialService="service",onDone}:{lang:Lang,initialService?:string,onDone?:()=>void}){
- const t=(z:string,e:string)=>lang==="zh"?z:e;const [service,setService]=useState(initialService),[date,setDate]=useState(datePlus(todaySydney(),1)),[time,setTime]=useState(""),[stage,setStage]=useState(1),[busy,setBusy]=useState(false),[error,setError]=useState(""),[result,setResult]=useState<any>(null),[copied,setCopied]=useState(false),[refresh,setRefresh]=useState(0);
+ const t=(z:string,e:string)=>lang==="zh"?z:e;const [service,setService]=useState(initialService),[date,setDate]=useState(nextBookingDate()),[time,setTime]=useState(""),[stage,setStage]=useState(1),[busy,setBusy]=useState(false),[error,setError]=useState(""),[result,setResult]=useState<any>(null),[copied,setCopied]=useState(false),[refresh,setRefresh]=useState(0);
  const [form,setForm]=useState({name:"",email:"",phone:"",vehicle:"",notes:""});const identity=useRef<{requestId:string,token:string}|null>(null);
  const [photosChecking,setPhotosChecking]=useState(false);const [photos,setPhotos]=useState<SelectedPhoto[]>([]),[savedPhotos,setSavedPhotos]=useState<BookingPhoto[]>([]),[uploadingName,setUploadingName]=useState(""),[photoFailures,setPhotoFailures]=useState<{name:string,code:string}[]>([]);const uploadedIds=useRef(new Set<string>());
  useEffect(()=>{setService(initialService)},[initialService]);const s=services.find(x=>x.id===service)!;

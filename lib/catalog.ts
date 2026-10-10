@@ -12,3 +12,6 @@ export function todaySydney(){return new Intl.DateTimeFormat("en-CA",{timeZone:"
 export function datePlus(date:string,n:number){const d=new Date(date+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);}
 export function serviceName(id:string,lang:Lang){const s=services.find(x=>x.id===id);return s?.[lang]||id;}
 export function validSlot(date:string,time:string){if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!times.includes(time))return false;const d=new Date(date+"T12:00:00Z");if(!Number.isFinite(d.getTime())||d.toISOString().slice(0,10)!==date)return false;const today=todaySydney();if(date<today||date>datePlus(today,60)||d.getUTCDay()===0)return false;if(d.getUTCDay()===6&&time>="13:00")return false;if(date===today){const now=new Intl.DateTimeFormat("en-GB",{timeZone:"Australia/Sydney",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).format(new Date());if(time<=now)return false;}return true;}
+
+/** Start on the next opening day rather than a closed Sunday. */
+export function nextBookingDate(today=todaySydney()){const next=datePlus(today,1);return new Date(next+"T12:00:00Z").getUTCDay()===0?datePlus(next,1):next;}
