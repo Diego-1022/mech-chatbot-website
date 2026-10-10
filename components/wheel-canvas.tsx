@@ -28,6 +28,7 @@ export default function WheelCanvas() {
         element!.dataset.drawCalls = String(stats.drawCalls);
         element!.dataset.triangles = String(stats.triangles);
         element!.dataset.caliperAngle = String(stats.fixedCaliperAngle);
+        element!.dataset.brakeClearance = String(stats.caliperSpokeClearance);
         element!.dataset.clearAlpha = String(stats.clearAlpha);
         element!.dataset.renders = String(stats.renders);
         root!.dataset.renderer = "webgl";

@@ -8,6 +8,7 @@ import {
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { TessellateModifier } from "three/addons/modifiers/TessellateModifier.js";
 import { mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
+import { BRAKE_LAYOUT, createWheelCaliper } from "./wheel-brakes";
 
 /** Locally modelled wheel: uniform albedo, actual bevels and fixed studio light.
  * No photograph, baked lighting, remote model or per-frame texture upload.
@@ -148,7 +149,7 @@ export function createWheelScene(canvas: HTMLCanvasElement) {
   ring(.732, .005, .217, alloyEdge);
 
   // A drilled rotor with open holes is mechanically behind the spokes.
-  const rotor = new Shape(); rotor.absarc(0, 0, .657, 0, Math.PI * 2, false);
+  const rotor = new Shape(); rotor.absarc(0, 0, BRAKE_LAYOUT.rotorRadius, 0, Math.PI * 2, false);
   const centre = new Path(); centre.absarc(0, 0, .235, 0, Math.PI * 2, true); rotor.holes.push(centre);
   for (let i = 0; i < 24; i++) for (let row = 0; row < 2; row++) {
     const angle = (i + row * .32) * Math.PI / 12;
@@ -156,7 +157,7 @@ export function createWheelScene(canvas: HTMLCanvasElement) {
     const hole = new Path(); hole.absarc(Math.cos(angle) * radius, Math.sin(angle) * radius, .009, 0, Math.PI * 2, true);
     rotor.holes.push(hole);
   }
-  const discGeometry = new ExtrudeGeometry(rotor, { depth: .034, bevelEnabled: false, curveSegments: 12 });
+  const discGeometry = new ExtrudeGeometry(rotor, { depth: BRAKE_LAYOUT.rotorFront - BRAKE_LAYOUT.rotorRear, bevelEnabled: false, curveSegments: 12 });
   const brushedCanvas = document.createElement("canvas"); brushedCanvas.width = brushedCanvas.height = 512;
   const brushed = brushedCanvas.getContext("2d");
   if (brushed) {
@@ -170,7 +171,7 @@ export function createWheelScene(canvas: HTMLCanvasElement) {
     const uv = discGeometry.attributes.uv;
     for (let i = 0; i < uv.count; i++) uv.setXY(i, .5 + uv.getX(i) / 1.314, .5 + uv.getY(i) / 1.314);
   }
-  const disc = mesh(discGeometry, steel); disc.position.z = -.035;
+  const disc = mesh(discGeometry, steel); disc.position.z = BRAKE_LAYOUT.rotorRear;
   cylinder(.234, .048, -.017, darkSteel);
 
   // Five forged split spokes; raised hub, dished branches and bevelled edges.
@@ -191,6 +192,7 @@ export function createWheelScene(canvas: HTMLCanvasElement) {
     vertices.setZ(i, vertices.getZ(i) + .12 + (.73 - radius) * .14 + bow);
   }
   spokeGeometry.computeVertexNormals();
+  spokeGeometry.computeBoundingBox();
   for (let i = 0; i < 5; i++) mesh(spokeGeometry, alloy).rotation.z = i * Math.PI * 2 / 5;
   cylinder(.188, .1, .24, alloyEdge);
   cylinder(.117, .026, .298, alloy);
@@ -211,26 +213,19 @@ export function createWheelScene(canvas: HTMLCanvasElement) {
   }
   rotating.add(bolts, recesses);
 
-  // The pad and yellow fixed caliper sit in front of the rotor, behind the rim.
-  const caliper = new Shape();
-  caliper.moveTo(-.05, -.24); caliper.quadraticCurveTo(-.12, -.20, -.12, -.12);
-  caliper.lineTo(-.12, .13); caliper.quadraticCurveTo(-.12, .22, -.05, .245);
-  caliper.lineTo(.056, .23); caliper.quadraticCurveTo(.11, .17, .11, .09);
-  caliper.lineTo(.11, -.12); caliper.quadraticCurveTo(.11, -.22, .056, -.235); caliper.closePath();
-  const body = mesh(new ExtrudeGeometry(caliper, { depth: .072, bevelEnabled: true, bevelThickness: .012, bevelSize: .012, bevelSegments: 4, curveSegments: 16 }), yellow, fixedBrake);
-  body.position.set(.549, .02, .015); body.rotation.z = -.08;
-  const caliperRibGeometry = new CylinderGeometry(.017, .017, .23, 10);
-  geometries.add(caliperRibGeometry);
-  for (const y of [-.09, .025, .13]) {
-    const rib = mesh(caliperRibGeometry, yellow, fixedBrake);
-    rib.rotation.z = Math.PI / 2 - .08; rib.position.set(.54, y, .095);
-  }
-  const padShape = new Shape(); padShape.moveTo(-.08, -.22); padShape.lineTo(.07, -.22); padShape.lineTo(.07, .22); padShape.lineTo(-.08, .22); padShape.closePath();
-  const brakePad = mesh(new ExtrudeGeometry(padShape, { depth: .019, bevelEnabled: true, bevelThickness: .005, bevelSize: .005, bevelSegments: 2 }), pad, fixedBrake);
-  brakePad.position.set(.47, .02, .005);
-  for (const y of [-.145, .145]) {
-    const bolt = cylinder(.015, .012, .107, darkSteel, fixedBrake); bolt.position.set(.545, y, .107);
-  }
+  const caliper = createWheelCaliper({ yellow, friction: pad, hardware: darkSteel });
+  fixedBrake.add(caliper.group);
+  for (const geometry of caliper.geometries) geometries.add(geometry);
+  // The maximum caliper front remains behind even the deepest spoke edge.
+  caliper.group.updateMatrixWorld(true);
+  let caliperFront = -Infinity;
+  caliper.group.traverse(object => {
+    if (object instanceof Mesh) {
+      object.geometry.computeBoundingBox();
+      caliperFront = Math.max(caliperFront, object.geometry.boundingBox!.max.z + object.position.z);
+    }
+  });
+  const caliperSpokeClearance = spokeGeometry.boundingBox!.min.z - caliperFront;
 
   let disposed = false, renders = 0;
   function resize(width: number, height: number) {
@@ -251,7 +246,7 @@ export function createWheelScene(canvas: HTMLCanvasElement) {
   function stats() {
     return { drawCalls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
       width: canvas.width, height: canvas.height, angle: rotating.rotation.z,
-      fixedCaliperAngle: fixedBrake.rotation.z, materials: materials.size, clearAlpha: renderer.getClearAlpha(), renders };
+      fixedCaliperAngle: fixedBrake.rotation.z, caliperSpokeClearance, materials: materials.size, clearAlpha: renderer.getClearAlpha(), renders };
   }
   function dispose() {
     if (disposed) return;
