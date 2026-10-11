@@ -14,5 +14,58 @@
     "prompt": "Use case: photorealistic-natural. Wide editorial group photograph for a fictional automotive workshop website. Exactly three fictional male mechanics, evenly spaced, waist up. Left: senior around 56 with short silver-grey hair and subtle stubble. Centre: mid-career around 38 with short dark hair. Right: apprentice around 22 with a youthful face and short dark hair. Matching charcoal work shirts with small unbranded yellow accents. Tidy blurred graphite workshop, soft natural window light, realistic skin texture, relaxed natural poses. Landscape composition, generous headroom, three equally prominent people. No celebrities, logos, lettering, watermarks, university insignia or extra people.",
     "encoding": "JPEG quality 82; original generated PNG preserved outside Git",
     "sha256": "3183d0e342c3d0a1ec19756e0312c6cd33d32dc002ebad379170c68d3b2c64f9"
+  },
+  "wheelPhotographicV4": {
+    "prompt": "Use case: precise-object-edit / product photography. Asset type: transparent photographic wheel foreground for an automotive website. The supplied image is the EDIT TARGET. Preserve the perfectly circular, exactly centered front-on orthographic camera, the realistic black rubber tyre silhouette, its shoulder tread and fine sidewall grain, the square framing and all genuine alpha transparency outside the tyre and between spokes. Replace the heavy thick alloy design with a premium REAL PHOTOGRAPHIC sports-car wheel inspired by a rolling Porsche 911 Turbo S with slender split-Y spokes and a centre-lock hub: five slender split-Y spoke pairs (ten graceful spoke arms), much more open area between spokes, dark graphite forged aluminium faces, narrow naturally polished silver chamfered edges, realistic subtle machining, a small blank dark metallic circular centre-lock hub. Think real HRE-style lightweight forged wheel in a DSLR catalogue photograph, NOT a toy, NOT Lego, NOT a diagram, NOT a cartoon, NOT a simplified 3D render. Use balanced broad coaxial softbox illumination on the rim so repeated spokes have similar brightness, with restrained true metal reflections and local cavity depth but no isolated bright upper quadrant or large white directional glare. The tyre can keep its subtle real photographic shading because its layer will remain stationary. Remove all text, tyre lettering, logos and wheel branding. Foreground tyre + rim ONLY: NO brake disc, NO caliper, NO suspension, NO car, NO road, NO background, NO drop shadow outside the silhouette. All spoke openings must be truly transparent, not opaque black. Keep wheel centred with about 2% clear padding on every side. Preserve image alpha and photographic material detail.",
+    "asset": "public/media/wheel-photo-v4.webp",
+    "original": "outputs/WHEEL_PHOTOGRAPHIC_V4.png",
+    "source": "Edit of own public/wheel-neutral-v3.png",
+    "generator": "built-in image_gen",
+    "created_date_sydney": "2026-10-11",
+    "encoding": "WebP quality92/alpha100; original dimensions preserved",
+    "width": 1254,
+    "height": 1254,
+    "alpha": true,
+    "bytes": 278928,
+    "sha256": "eb1a635b0b54f7ac8130412b7065612e0223a35fd7dab40b5ec5a3e171afad68"
+  },
+  "brakeDiscPhotographicV4": {
+    "prompt": "Use case: product-mockup / real studio photography. Asset type: a transparent brake rotor photograph to sit behind a rotating car wheel on a dark automotive website. Create ONE realistic high-performance two-piece drilled brake disc, perfectly straight front-on orthographic view, perfectly circular and exactly centred on a square canvas with 5% transparent padding. This is a real machined metal product photograph, with fine concentric machining wear and subtle steel grain, a medium smoky silver cast-iron friction ring (not flat white, not plastic), dark graphite aluminium central hat and believable small recessed mounting fasteners. Several restrained concentric rows of small drilled holes through the friction ring, genuinely transparent holes, and a transparent central axle bore. Broad even frontal softbox lighting gives photographic chamfers and metal depth without a single bright directional hotspot. Symmetric lighting suitable for rotating as a 2D photograph. Transparent alpha outside the disc, inside the axle bore and through the drilled holes. No wheel, tyre, caliper, brake pad, scenery, floor, external drop shadow, text, logo or watermark. No diagram, no cartoon, no toy, no Lego, no flat vector look, no simplified computer model. The ring should look metallic and slightly used, like a close-up DSLR photo of a real sports-car brake rotor.",
+    "asset": "public/media/brake-disc-photo-v4.webp",
+    "original": "outputs/BRAKE_DISC_PHOTOGRAPHIC_V4.png",
+    "source": "New built-in generated image",
+    "generator": "built-in image_gen",
+    "created_date_sydney": "2026-10-11",
+    "encoding": "WebP quality92/alpha100; original dimensions preserved",
+    "width": 1254,
+    "height": 1254,
+    "alpha": true,
+    "bytes": 446470,
+    "sha256": "161ce019d83241d262acbb92da864a6e57e7f06b4ef7e1e94a263bfc9148ef81"
+  },
+  "caliperPhotographicV4": {
+    "source": "public/caliper-photoreal-v2.png",
+    "output": "public/media/caliper-photo-v4.webp",
+    "generator": "Reuse of own previously generated image; delivery encoding only",
+    "encoding": "WebP quality92/alpha100; dimensions preserved",
+    "bytes": 124952,
+    "sha256": "6275d28593406c1767019d5961ae757f9bad50d5ac6701b2ee3a1d8b597ae3aa"
+  },
+  "wheelMotionReferences": {
+    "observed_date_sydney": "2026-10-11",
+    "browser": "Codex in-app browser",
+    "videos": [
+      {
+        "title": "2014 Porsche 911 Turbo S : Rolling shot quick look",
+        "url": "https://www.youtube.com/watch?v=6HTb2fg_3xs",
+        "observation": "Rolling wheel close-up observed near15.7seconds: slender graphite/silver-edged spokes, centre-lock hub and stationary yellow caliper"
+      },
+      {
+        "title": "Porsche 911 GT3 RS official model film and brake details",
+        "url": "https://www.porsche.com/international/models/911/911-gt3-rs/911-gt3-rs/",
+        "observation": "Official short model film played; wheel/brake imagery reviewed"
+      }
+    ],
+    "use": "Material/motion reference only; no footage or manufacturer image shipped"
   }
 }
