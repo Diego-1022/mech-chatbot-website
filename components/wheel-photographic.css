@@ -7,3 +7,40 @@
 .kw-wheel .wheel-photo-tyre { z-index:3; mask-image:radial-gradient(circle closest-side,transparent 76.5%,#000 77.2%); }
 .wheel-photo-rim-light { position:absolute; inset:0; z-index:4; transform:rotate(var(--wheel-rotation,0deg)); mask-image:url('/media/wheel-photo-v4.webp'); mask-size:100% 100%; mask-repeat:no-repeat; }
 .wheel-photo-fixed-light { position:absolute; inset:0; transform:rotate(calc(-1 * var(--wheel-rotation,0deg))); background:linear-gradient(145deg,#ffffff0e,transparent 48%,#00000012); mask-image:radial-gradient(circle closest-side,#000 71%,transparent 77%); }
+
+/* Input is local to the circular tyre, leaving the rest of the page scrollable. */
+.wheel-input-guide { margin-top:24px; color:#b7c6c5; font-size:.72rem; line-height:1.5; }
+.wheel-mouse-guide { display:flex; flex-wrap:wrap; justify-content:center; gap:8px 18px; margin:0; }
+.wheel-mouse-guide > span,.wheel-touch-guide { display:flex; align-items:center; justify-content:center; gap:7px; }
+.wheel-rotate-cue { color:var(--signal); font-weight:650; }
+.wheel-page-cue { color:#b7c6c5; }
+.wheel-touch-guide { display:none; margin:0; text-align:center; }
+.kw-wheel-area[data-wheel-hovered=true] .wheel-orbit { border-color:var(--signal); }
+.kw-wheel-area[data-wheel-hovered=true] .wheel-rotate-cue { text-shadow:0 0 15px #ffd34c55; }
+.kw-stage > .kw-scroll-hint { display:flex; flex-direction:column; align-items:center; gap:4px; bottom:17px; margin:0; color:#f5f3ec; text-align:center; text-decoration:none; letter-spacing:.025em; white-space:nowrap; }
+.kw-stage > .kw-scroll-hint > svg { color:var(--signal); }
+.kw-stage > .kw-scroll-hint strong { font-size:.9rem; font-weight:800; }
+.kw-stage > .kw-scroll-hint > span { font-size:.65rem; font-weight:450; color:#a4b5b4; }
+.kw-stage > .kw-scroll-hint::after { display:none; }
+.kw-stage > .kw-scroll-hint:hover strong { color:var(--signal); }
+@media(min-width:861px) {
+  .kw-stage > .kw-wheel-area { width:min(100%,calc(100svh - 260px)); justify-self:center; }
+}
+@media(max-width:860px) {
+  .wheel-input-guide { font-size:.65rem; margin-top:18px; }
+  .wheel-mouse-guide { gap:3px; }
+  .wheel-mouse-guide > span { flex-basis:100%; }
+  .kw-track { height:auto; }
+  .kw-stage { position:relative; top:0; height:auto; min-height:100svh; grid-template-rows:auto auto auto; align-content:start; padding-bottom:26px; }
+  .kw-stage > .kw-scroll-hint { position:static; transform:none; grid-column:1/-1; order:2; margin-top:12px; }
+  .kw-stage > .kw-scroll-hint strong { font-size:.82rem; }
+  .kw-stage > .kw-scroll-hint > span { font-size:.6rem; }
+}
+@media(hover:none) and (pointer:coarse) {
+  .wheel-mouse-guide { display:none; }
+  .wheel-touch-guide { display:flex; }
+  .kw-stage > .kw-scroll-hint > span { display:none; }
+}
+@media(prefers-reduced-motion:reduce) {
+  .kw-stage > .kw-scroll-hint { position:static; transform:none; grid-column:1/-1; order:2; margin-top:24px; }
+}

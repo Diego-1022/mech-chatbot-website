@@ -5,7 +5,7 @@ https://github.com/subinayadi-ux/Kingsway-site
 
 Reference commit: 38540df83aef0d3a767fdaa26299e97f21d78e42
 
-The primer-grey surfaces, steel navigation, yellow accents, wheel artwork and scroll-led presentation are adapted from that project. The wheel SVG assets are extracted from its rendered artwork. The wheel rotates continuously with forward and reverse page scrolling on desktop, narrow preview panes, mobile and short viewports. Topic buttons remain available. Users who request reduced motion receive a non-sticky presentation with direct topic selection instead of scroll animation.
+The primer-grey surfaces, steel navigation, yellow accents, wheel artwork and scroll-led presentation are adapted from that project. The original wheel SVG assets were extracted from its rendered artwork; the current photographic replacement is described below. Topic buttons remain available. Users who request reduced motion receive a non-sticky presentation without page-driven rotation.
 
 Harbour Auto's name, six-service catalogue, fictional AUD ranges, Sydney appointment rules, D1 booking persistence, token-protected management links, authenticated administration and server-side OpenAI integration are retained. The reference site's separate accounts, KV backend, sample phone number and different service promises are not introduced.
 
@@ -18,6 +18,14 @@ The owner rejected the modelled wheel's toy-like appearance and requested genera
 The built-in image generator edited the project's own neutral wheel into a slender graphite/silver-edged centre-lock design and generated a separate machined brake-disc photograph. The original yellow caliper photo is reused. Genuine cutout alpha reveals the brake layers through the spokes. Selected PNG originals remain in the task's outputs; delivery WebP files preserve dimensions/alpha and use quality92. Exact prompts, output hashes and reference links are in `UI_ASSET_PROMPTS.json`.
 
 Motion/style references observed in the internal browser: [2014 Porsche 911 Turbo S rolling close-up](https://www.youtube.com/watch?v=6HTb2fg_3xs), including the wheel near15.7seconds, and the [official Porsche 911 GT3 RS model film/details](https://www.porsche.com/international/models/911/911-gt3-rs/911-gt3-rs/). These informed photographic materials, slender spokes and the stationary-caliper impression; no Porsche/HRE footage or manufacturer image is shipped as a site asset.
+
+## Wheel and page input
+
+Mouse/trackpad scrolling over the circular tyre accumulates unlimited positive or negative rotation; crossing a full turn cycles the four topics without scrolling the page. A non-passive wheel listener exists only on the wheel element. Circular hit testing excludes the transparent corners, and Ctrl+wheel/pinch zoom remains native. No touch scrolling is intercepted.
+
+Away from the tyre, normal desktop page scrolling adds its angular movement to the existing rotation instead of resetting manual turns. Topic controls choose the nearest equivalent angle without programmatic page scrolling. Narrow screens (860px and below) use natural document flow and direct topic selection, so longer descriptions and the booking cue cannot overlap inside a fixed-height stage.
+
+Bilingual wheel/page input hints and a hover ring identify the interaction. Touch devices receive swipe/tap wording. A bold downward cue links to booking; existing reduced-motion CSS disables smooth anchor scrolling. Desktop wheel size leaves room for both the input hints and booking cue on shorter viewports.
 
 ## Historical physical wheel experiment (removed)
 

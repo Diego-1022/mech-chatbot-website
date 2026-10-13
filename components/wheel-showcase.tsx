@@ -13,7 +13,7 @@ export default function WheelShowcase({ active, titles, onSelect }: {
   titles: string[];
   onSelect: (index: number) => void;
 }) {
-  return <div className="kw-wheel kw-wheel-v2" data-renderer="photographic">
+  return <div className="kw-wheel kw-wheel-v2" data-renderer="photographic" aria-describedby="wheel-input-guide">
     <div className="wheel-orbit" aria-hidden="true" />
     <div className="wheel-ground" aria-hidden="true" />
     <div className="wheel-photo-assembly" aria-hidden="true">
