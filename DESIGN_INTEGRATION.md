@@ -19,6 +19,12 @@ The built-in image generator edited the project's own neutral wheel into a slend
 
 Motion/style references observed in the internal browser: [2014 Porsche 911 Turbo S rolling close-up](https://www.youtube.com/watch?v=6HTb2fg_3xs), including the wheel near15.7seconds, and the [official Porsche 911 GT3 RS model film/details](https://www.porsche.com/international/models/911/911-gt3-rs/911-gt3-rs/). These informed photographic materials, slender spokes and the stationary-caliper impression; no Porsche/HRE footage or manufacturer image is shipped as a site asset.
 
+### Common rotation axis
+
+The generated1254px images are not perfectly registered to their canvas centers: the wheel cap ring fits near(626.70,620.57), and the rotor aperture near(627.08,616.45). Rotating the raw image about(627,627) made these centers orbit. Each photo now receives its own static percentage translation inside a wrapper that rotates about the shared50%/50% axle. The rim alpha-light mask uses the same translation, and its gradient counter-rotates about the measured source hub. Radial clipping stays centered on the wrapper; the fixed tyre and caliper are preserved. Recalibrate these values if the source photos change.
+
+The desktop animated stage also uses a zero-minimum grid row, so longer topic text cannot increase the row height and shift the whole wheel. Natural-flow mobile and reduced-motion layouts retain their existing behavior.
+
 ## Wheel and page input
 
 Mouse/trackpad scrolling over the circular tyre accumulates unlimited positive or negative rotation; crossing a full turn cycles the four topics without scrolling the page. A non-passive wheel listener exists only on the wheel element. Circular hit testing excludes the transparent corners, and Ctrl+wheel/pinch zoom remains native. No touch scrolling is intercepted.

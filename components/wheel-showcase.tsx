@@ -17,11 +17,11 @@ export default function WheelShowcase({ active, titles, onSelect }: {
     <div className="wheel-orbit" aria-hidden="true" />
     <div className="wheel-ground" aria-hidden="true" />
     <div className="wheel-photo-assembly" aria-hidden="true">
-      <img className="wheel-photo-disc" src="/media/brake-disc-photo-v4.webp" alt="" width="1254" height="1254" />
+      <div className="wheel-photo-disc"><img src="/media/brake-disc-photo-v4.webp" alt="" width="1254" height="1254" /></div>
       <img className="wheel-photo-caliper" src="/media/caliper-photo-v4.webp" alt="" width="1254" height="1254" />
-      <img className="wheel-photo-rim" src="/media/wheel-photo-v4.webp" alt="" width="1254" height="1254" fetchPriority="high" />
+      <div className="wheel-photo-rim"><img src="/media/wheel-photo-v4.webp" alt="" width="1254" height="1254" fetchPriority="high" /></div>
       <img className="wheel-photo-tyre" src="/media/wheel-photo-v4.webp" alt="" width="1254" height="1254" />
-      <div className="wheel-photo-rim-light"><div className="wheel-photo-fixed-light" /></div>
+      <div className="wheel-photo-rim-light"><div className="wheel-photo-rim-mask"><div className="wheel-photo-fixed-light" /></div></div>
     </div>
     {icons.map((Icon, i) => {
       const radians = (i * 90 - 90) * Math.PI / 180;
