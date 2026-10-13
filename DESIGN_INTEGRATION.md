@@ -13,7 +13,7 @@ Main integration files: app/garage.tsx, app/kingsway.css, app/layout.tsx and pub
 
 ## Photographic wheel presentation
 
-The owner rejected the modelled wheel's toy-like appearance and requested generated photographic layers informed by sports-car rolling footage. The current wheel uses `components/wheel-showcase.tsx` and `wheel-photographic.css`, with no Three.js/WebGL renderer or 3D geometry dependencies. The rim and brake-disc photos follow the existing scroll angle; the photographic tyre's broad illumination and the yellow caliper stay fixed. A faint fixed light field is masked by the rotating spoke cutout. This is a lightweight visual approximation using photos, not a physically simulated wheel or footage playback.
+The owner rejected the modelled wheel's toy-like appearance and requested generated photographic layers informed by sports-car rolling footage. The current wheel uses `components/wheel-showcase.tsx` and `wheel-photographic.css`, with no Three.js/WebGL renderer or 3D geometry dependencies. The complete tyre/rim photograph follows the existing scroll angle as one cutout; both the brake-disc photo and yellow caliper stay fixed behind its transparent spokes. A faint fixed light field is masked by the rotating full-wheel cutout. This is a lightweight visual approximation using photos, not a physically simulated wheel or footage playback.
 
 The built-in image generator edited the project's own neutral wheel into a slender graphite/silver-edged centre-lock design and generated a separate machined brake-disc photograph. The original yellow caliper photo is reused. Genuine cutout alpha reveals the brake layers through the spokes. Selected PNG originals remain in the task's outputs; delivery WebP files preserve dimensions/alpha and use quality92. Exact prompts, output hashes and reference links are in `UI_ASSET_PROMPTS.json`.
 
@@ -21,7 +21,7 @@ Motion/style references observed in the internal browser: [2014 Porsche 911 Turb
 
 ### Common rotation axis
 
-The generated1254px images are not perfectly registered to their canvas centers: the wheel cap ring fits near(626.70,620.57), and the rotor aperture near(627.08,616.45). Rotating the raw image about(627,627) made these centers orbit. Each photo now receives its own static percentage translation inside a wrapper that rotates about the shared50%/50% axle. The rim alpha-light mask uses the same translation, and its gradient counter-rotates about the measured source hub. Radial clipping stays centered on the wrapper; the fixed tyre and caliper are preserved. Recalibrate these values if the source photos change.
+The generated1254px images are not perfectly registered to their canvas centers: the wheel cap ring fits near(626.70,620.57), and the rotor aperture near(627.08,616.45). Rotating the raw image about(627,627) made these centers orbit. Each photo receives its own static percentage translation to the shared50%/50% axle. The complete tyre/rim wrapper rotates; the brake-disc wrapper stays fixed. The alpha-light mask uses the wheel translation, and its gradient counter-rotates about the measured source hub. There is no radial split between tyre and rim: keeping the full photograph together preserves its original irregular boundary at every angle. Recalibrate these values if the source photos change.
 
 The desktop animated stage also uses a zero-minimum grid row, so longer topic text cannot increase the row height and shift the whole wheel. Natural-flow mobile and reduced-motion layouts retain their existing behavior.
 

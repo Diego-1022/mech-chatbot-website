@@ -5,8 +5,8 @@ import "./wheel-photographic.css";
 
 const icons = [House, ScanLine, ShieldCheck, Settings];
 
-/** Photographic cutouts: tyre light stays still, rim/rotor follow the scroll
- * angle and the fixed caliper is revealed through real transparent openings.
+/** The whole tyre/rim cutout rotates as one image. The brake assembly stays
+ * fixed behind the real transparent spoke openings.
  */
 export default function WheelShowcase({ active, titles, onSelect }: {
   active: number;
@@ -19,8 +19,7 @@ export default function WheelShowcase({ active, titles, onSelect }: {
     <div className="wheel-photo-assembly" aria-hidden="true">
       <div className="wheel-photo-disc"><img src="/media/brake-disc-photo-v4.webp" alt="" width="1254" height="1254" /></div>
       <img className="wheel-photo-caliper" src="/media/caliper-photo-v4.webp" alt="" width="1254" height="1254" />
-      <div className="wheel-photo-rim"><img src="/media/wheel-photo-v4.webp" alt="" width="1254" height="1254" fetchPriority="high" /></div>
-      <img className="wheel-photo-tyre" src="/media/wheel-photo-v4.webp" alt="" width="1254" height="1254" />
+      <div className="wheel-photo-wheel"><img src="/media/wheel-photo-v4.webp" alt="" width="1254" height="1254" fetchPriority="high" /></div>
       <div className="wheel-photo-rim-light"><div className="wheel-photo-rim-mask"><div className="wheel-photo-fixed-light" /></div></div>
     </div>
     {icons.map((Icon, i) => {
