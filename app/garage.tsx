@@ -1,6 +1,6 @@
 "use client";
-import {useEffect, useRef, useState} from "react";
-import {CalendarDays, MessageCircle, Clock3, ShieldCheck} from "lucide-react";
+import {useCallback, useEffect, useRef, useState} from "react";
+import {ArrowDown, CalendarDays, MessageCircle, Clock3, ShieldCheck, Mouse, RotateCw, MoveDown} from "lucide-react";
 import {services} from "@/lib/catalog";
 import {useLanguage} from "@/lib/client";
 import Booking from "@/components/booking";
@@ -16,10 +16,15 @@ export default function Garage() {
   const [chat, setChat] = useState(false);
   const [chosen, setChosen] = useState("service");
   const [active, setActive] = useState(0);
+  const [wheelHovered, setWheelHovered] = useState(false);
   const wheelArea = useRef<HTMLDivElement>(null);
-  function setRotation(degrees:number) {
+  const wheelAngle = useRef(0);
+  const setRotation = useCallback((degrees:number) => {
+    wheelAngle.current = degrees;
     wheelArea.current?.style.setProperty("--wheel-rotation", `${degrees}deg`);
-  }
+    wheelArea.current?.setAttribute("data-wheel-angle", String(degrees));
+    setActive(((Math.round(degrees / 90) % 4) + 4) % 4);
+  }, []);
   const [compact, setCompact] = useState(false);
   const track = useRef<HTMLElement>(null);
   const stage = useRef<HTMLDivElement>(null);
@@ -31,11 +36,11 @@ export default function Garage() {
     document.getElementById("booking")?.scrollIntoView({behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"});
   }
   function goToPanel(index:number) {
-    if (compact) { setActive(index); setRotation(index * 90); return; }
-    if (!track.current || !stage.current) return;
-    const top = track.current.getBoundingClientRect().top + window.scrollY;
-    const span = track.current.offsetHeight - stage.current.offsetHeight;
-    window.scrollTo({top: top + span * index / 3, behavior:"smooth"});
+    // Select the nearest equivalent angle without moving the page or losing
+    // accumulated turns after using the wheel's local scroll interaction.
+    const current = ((wheelAngle.current % 360) + 360) % 360;
+    const delta = ((index * 90 - current + 540) % 360) - 180;
+    setRotation(wheelAngle.current + delta);
   }
   useEffect(()=>{
     const requested=new URL(window.location.href).searchParams.get("service");
@@ -43,21 +48,65 @@ export default function Garage() {
     if(window.location.hash==="#booking")requestAnimationFrame(()=>document.getElementById("booking")?.scrollIntoView({behavior:"auto"}));
   },[]);
   useEffect(() => {
-    // Small preview windows still use the original scroll-driven wheel.
     const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const wheel = wheelArea.current?.querySelector<HTMLElement>(".kw-wheel");
     let frame = 0;
+    let rotationFrame = 0;
+    let pendingRotation = 0;
+    let previousScrollAngle = 0;
     function update() {
       if (query.matches || !track.current || !stage.current) return;
       const span = track.current.offsetHeight - stage.current.offsetHeight;
+      if (span <= 1) { previousScrollAngle = 0; return; }
       const progress = Math.max(0, Math.min(3, -track.current.getBoundingClientRect().top / Math.max(span,1) * 3));
-      setActive(Math.round(progress)); setRotation(progress * 90);
+      const scrollAngle = progress * 90;
+      // Only add the page's movement, preserving manual turns when the pointer
+      // leaves the tyre. Resizing must not reset an accumulated rotation.
+      setRotation(wheelAngle.current + scrollAngle - previousScrollAngle);
+      previousScrollAngle = scrollAngle;
     }
     function schedule() { cancelAnimationFrame(frame); frame = requestAnimationFrame(update); }
-    function mode() {setCompact(query.matches); setActive(0); setRotation(0); schedule();}
+    function resize() {
+      if (!track.current || !stage.current) return;
+      const span = track.current.offsetHeight - stage.current.offsetHeight;
+      if (span <= 1) { previousScrollAngle = 0; return; }
+      previousScrollAngle = Math.max(0, Math.min(3, -track.current.getBoundingClientRect().top / Math.max(span,1) * 3)) * 90;
+    }
+    function mode() {setCompact(query.matches); resize();}
+    function overTyre(event: MouseEvent) {
+      if (!wheel) return false;
+      const rect = wheel.getBoundingClientRect();
+      const radius = Math.min(rect.width, rect.height) * .42;
+      return Math.hypot(event.clientX - rect.left - rect.width / 2, event.clientY - rect.top - rect.height / 2) <= radius;
+    }
+    function pointerMove(event: PointerEvent) { setWheelHovered(event.pointerType !== "touch" && overTyre(event)); }
+    function pointerLeave() { setWheelHovered(false); }
+    function rotate(event: WheelEvent) {
+      // Pinch-to-zoom and the transparent square corners retain native input.
+      if (event.ctrlKey || !event.cancelable || !event.deltaY || !overTyre(event)) return;
+      event.preventDefault();
+      setWheelHovered(true);
+      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? window.innerHeight : 1;
+      pendingRotation += event.deltaY * unit * .18;
+      if (!rotationFrame) rotationFrame = requestAnimationFrame(() => {
+        rotationFrame = 0;
+        setRotation(wheelAngle.current + pendingRotation);
+        pendingRotation = 0;
+      });
+    }
     mode(); query.addEventListener("change",mode);
-    window.addEventListener("scroll",schedule,{passive:true}); window.addEventListener("resize",schedule);
-    return () => {cancelAnimationFrame(frame); query.removeEventListener("change",mode); window.removeEventListener("scroll",schedule); window.removeEventListener("resize",schedule);};
-  }, []);
+    schedule();
+    wheel?.addEventListener("wheel",rotate,{passive:false});
+    wheel?.addEventListener("pointermove",pointerMove);
+    wheel?.addEventListener("pointerleave",pointerLeave);
+    window.addEventListener("scroll",schedule,{passive:true}); window.addEventListener("resize",resize);
+    return () => {
+      cancelAnimationFrame(frame); cancelAnimationFrame(rotationFrame);
+      query.removeEventListener("change",mode);
+      wheel?.removeEventListener("wheel",rotate); wheel?.removeEventListener("pointermove",pointerMove); wheel?.removeEventListener("pointerleave",pointerLeave);
+      window.removeEventListener("scroll",schedule); window.removeEventListener("resize",resize);
+    };
+  }, [setRotation]);
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || !("IntersectionObserver" in window)) return;
     const observer = new IntersectionObserver(entries => {
@@ -84,9 +133,13 @@ export default function Garage() {
       <section id="home" className={"kw-track"+(compact?" is-compact":"")} ref={track} aria-label={t("车辆服务介绍", "Explore car care")}>
         <div className="kw-stage" ref={stage}>
           <BackgroundPaths/>
-          <div className="kw-wheel-area" ref={wheelArea}>
+          <div className="kw-wheel-area" ref={wheelArea} data-wheel-hovered={wheelHovered}>
             <WheelShowcase active={active} titles={titles} onSelect={goToPanel}/>
             <div className="kw-dial-caption"><span>0{active+1} / 04</span><span>{titles[active]}</span></div>
+            <div className="wheel-input-guide" id="wheel-input-guide">
+              <p className="wheel-mouse-guide"><span className="wheel-rotate-cue"><RotateCw size={15}/>{t("轮胎上滚动 · 循环旋转", "Scroll on wheel · Rotate freely")}</span><span className="wheel-page-cue"><Mouse size={15}/>{t("移开指针 · 滚动页面", "Move off wheel · Scroll page")}</span></p>
+              <p className="wheel-touch-guide"><MoveDown size={15}/>{t("滑动浏览页面 · 点图标切换介绍", "Swipe to scroll · Tap icons to explore")}</p>
+            </div>
           </div>
           <div className="kw-copy">
             <p className="kw-kicker"><span className="kw-status-dot" aria-hidden="true"/>{t("悉尼 · 专注车辆养护", "SYDNEY · AUTOMOTIVE CARE")}</p>
@@ -115,7 +168,7 @@ export default function Garage() {
             <div className="kw-topic-label">{t("探索车辆养护", "EXPLORE CAR CARE")}<span>0{active+1} / 04</span></div>
             <div className="kw-section-tabs" aria-label={t("选择服务介绍", "Choose a care topic")}>{titles.map((label,i)=><button key={i} aria-pressed={active===i} onClick={()=>goToPanel(i)}>{label}</button>)}</div>
           </div>
-          {!compact&&<p className="kw-scroll-hint">{t("滚动了解服务", "Scroll to explore")}</p>}
+          <a className="kw-scroll-hint" href="#booking"><ArrowDown size={18}/><strong>{t("向下滑动，预约到店", "Scroll down to book a visit")}</strong><span>{t("在轮胎以外的区域滚动", "Scroll outside the wheel")}</span></a>
         </div>
       </section>
       <section className="kw-booking-section" id="booking">
