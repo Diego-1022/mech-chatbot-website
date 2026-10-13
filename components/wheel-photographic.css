@@ -5,18 +5,16 @@
   --rim-align-x:.0239234%; --rim-align-y:.5127592%;
   --disc-align-x:-.0063796%; --disc-align-y:.8413078%;
 }
-.wheel-photo-disc,.wheel-photo-rim,.wheel-photo-rim-light { position:absolute; inset:0; transform-origin:50% 50%; }
-.kw-wheel .wheel-photo-disc { inset:16%; width:68%; height:68%; z-index:0; transform:rotate(var(--wheel-rotation,0deg)); }
+.wheel-photo-disc,.wheel-photo-wheel,.wheel-photo-rim-light { position:absolute; inset:0; transform-origin:50% 50%; }
+.kw-wheel .wheel-photo-disc { inset:16%; width:68%; height:68%; z-index:0; }
 .kw-wheel .wheel-photo-disc > img { transform:translate(var(--disc-align-x),var(--disc-align-y)); }
 .kw-wheel .wheel-photo-caliper { left:62%; top:35%; width:30%; height:30%; z-index:1; object-fit:contain; }
-.kw-wheel .wheel-photo-rim { z-index:2; transform:rotate(var(--wheel-rotation,0deg)); mask-image:radial-gradient(circle closest-side,#000 77.2%,transparent 77.8%); }
-.kw-wheel .wheel-photo-rim > img { transform:translate(var(--rim-align-x),var(--rim-align-y)); }
-/* Keep broad rubber lighting anchored to the page rather than rotating the
-   photograph's upper/lower colour variation with every spoke. */
-.kw-wheel .wheel-photo-tyre { z-index:3; mask-image:radial-gradient(circle closest-side,transparent 76.5%,#000 77.2%); }
+/* One complete cutout keeps the tyre/rim boundary intact at every angle. */
+.kw-wheel .wheel-photo-wheel { z-index:2; transform:rotate(var(--wheel-rotation,0deg)); }
+.kw-wheel .wheel-photo-wheel > img { transform:translate(var(--rim-align-x),var(--rim-align-y)); }
 .wheel-photo-rim-light { z-index:4; transform:rotate(var(--wheel-rotation,0deg)); }
 .wheel-photo-rim-mask { position:absolute; inset:0; transform:translate(var(--rim-align-x),var(--rim-align-y)); mask-image:url('/media/wheel-photo-v4.webp'); mask-size:100% 100%; mask-repeat:no-repeat; }
-.wheel-photo-fixed-light { position:absolute; inset:0; transform-origin:calc(50% - var(--rim-align-x)) calc(50% - var(--rim-align-y)); transform:rotate(calc(-1 * var(--wheel-rotation,0deg))); background:linear-gradient(145deg,#ffffff0e,transparent 48%,#00000012); mask-image:radial-gradient(circle closest-side at calc(50% - var(--rim-align-x)) calc(50% - var(--rim-align-y)),#000 71%,transparent 77%); }
+.wheel-photo-fixed-light { position:absolute; inset:0; transform-origin:calc(50% - var(--rim-align-x)) calc(50% - var(--rim-align-y)); transform:rotate(calc(-1 * var(--wheel-rotation,0deg))); background:linear-gradient(145deg,#ffffff0e,transparent 48%,#00000012); }
 
 /* Input is local to the circular tyre, leaving the rest of the page scrollable. */
 .wheel-input-guide { margin-top:24px; color:#b7c6c5; font-size:.72rem; line-height:1.5; }
