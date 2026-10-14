@@ -12,7 +12,7 @@ function SelectedThumbnail({ photo, lang }: { photo: SelectedPhoto; lang: Lang }
   useEffect(() => () => URL.revokeObjectURL(url), [url]);
   return <div className="photo-thumbnail">{failed ? <ImageOff size={28} aria-hidden="true" /> : <img src={url} alt={photo.file.name} loading="lazy" decoding="async" onError={() => setFailed(true)} />}{failed && <span>{lang === "zh" ? "此格式暂无预览" : "No preview for this format"}</span>}</div>;
 }
-export function PhotoSelection({ photos, onChange, onCheckingChange, lang, disabled = false }: { photos: SelectedPhoto[]; onChange: (photos: SelectedPhoto[]) => void; onCheckingChange?: (checking: boolean) => void; lang: Lang; disabled?: boolean }) {
+export function PhotoSelection({ photos, onChange, onCheckingChange, lang, disabled = false, context = "booking" }: { context?: "booking" | "chat"; photos: SelectedPhoto[]; onChange: (photos: SelectedPhoto[]) => void; onCheckingChange?: (checking: boolean) => void; lang: Lang; disabled?: boolean }) {
   const t = (zh: string, en: string) => lang === "zh" ? zh : en;
   const id = useId(); const [error, setError] = useState(""); const [dragging, setDragging] = useState(false); const [checking, setChecking] = useState(false);
   async function add(files: FileList | File[] | null) {
@@ -39,8 +39,8 @@ export function PhotoSelection({ photos, onChange, onCheckingChange, lang, disab
     <p className="photo-count">{photos.length} / {MAX_BOOKING_PHOTOS} {t("张图片", "images")}</p>
     {checking && <p className="small" role="status">{t("正在检查图片…", "Checking images…")}</p>}
     {photos.length > 0 && <div className="selected-photo-grid">{photos.map(photo => <article className="selected-photo" key={photo.id}><SelectedThumbnail photo={photo} lang={lang} /><div className="selected-photo-info"><strong title={photo.file.name}>{photo.file.name}</strong><span>{(photo.file.size / (1024 * 1024)).toFixed(2)} MB</span></div><button className="photo-remove" type="button" disabled={disabled} aria-label={t("移除图片 ", "Remove image ") + photo.file.name} onClick={() => { setError(""); onChange(photos.filter(item => item.id !== photo.id)); }}><X size={16} /></button></article>)}</div>}
-    {error && <p className="error" role="alert">{photoErrorText(error, lang)}</p>}
-    <p className="photo-privacy">{t("图片只供你和店铺管理员查看；提交预约后上传。支持 JPG、PNG、WebP、GIF、AVIF、HEIC/HEIF。", "Images are private to you and the workshop administrator, and upload after booking confirmation. JPG, PNG, WebP, GIF, AVIF and HEIC/HEIF supported.")}</p>
+    {error && <p className="error" role="alert">{context === "chat" && error === "TOO_MANY_IMAGES" ? t("每条消息最多添加 2 张图片。", "Add no more than 2 images per message.") : photoErrorText(error, lang)}</p>}
+    <p className="photo-privacy">{context === "chat" ? t("发送时将压缩后的图片交由 OpenAI 分析，不会自动添加到预约。账户仅保存文字分析；图片仅在当前会话中显示。请避免包含人脸、车牌和个人资料。HEIC/HEIF 等格式需浏览器可读取，否则请改用 JPG。", "On send, compressed images go to OpenAI for analysis and are not attached to a booking. Accounts save text analysis only; images display in this session. Avoid faces, number plates and personal details. HEIC/HEIF and other formats require browser decoding; use JPG if unsupported.") : t("图片只供你和店铺管理员查看；提交预约后上传。支持 JPG、PNG、WebP、GIF、AVIF、HEIC/HEIF。", "Images are private to you and the workshop administrator, and upload after booking confirmation. JPG, PNG, WebP, GIF, AVIF and HEIC/HEIF supported.")}</p>
   </fieldset>;
 }
 export function PhotoReview({ photos, lang }: { photos: SelectedPhoto[]; lang: Lang }) {
