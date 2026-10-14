@@ -5,8 +5,8 @@ import "./wheel-photographic.css";
 
 const icons = [House, ScanLine, ShieldCheck, Settings];
 
-/** The whole tyre/rim cutout rotates as one image. The brake assembly stays
- * fixed behind the real transparent spoke openings.
+/** The whole tyre/rim cutout rotates as one image. The brake disc follows
+ * the same angle; only the caliper stays fixed behind the spoke openings.
  */
 export default function WheelShowcase({ active, titles, onSelect }: {
   active: number;

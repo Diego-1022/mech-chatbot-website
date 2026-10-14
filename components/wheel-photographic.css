@@ -6,7 +6,7 @@
   --disc-align-x:-.0063796%; --disc-align-y:.8413078%;
 }
 .wheel-photo-disc,.wheel-photo-wheel,.wheel-photo-rim-light { position:absolute; inset:0; transform-origin:50% 50%; }
-.kw-wheel .wheel-photo-disc { inset:16%; width:68%; height:68%; z-index:0; }
+.kw-wheel .wheel-photo-disc { inset:16%; width:68%; height:68%; z-index:0; transform:rotate(var(--wheel-rotation,0deg)); }
 .kw-wheel .wheel-photo-disc > img { transform:translate(var(--disc-align-x),var(--disc-align-y)); }
 .kw-wheel .wheel-photo-caliper { left:62%; top:35%; width:30%; height:30%; z-index:1; object-fit:contain; }
 /* One complete cutout keeps the tyre/rim boundary intact at every angle. */
