@@ -39,10 +39,10 @@ export async function accountRate(request:Request,kind:string,max:number) {
   const row=await database().prepare("INSERT INTO rate_limits(key,window,hits) VALUES(?,?,1) ON CONFLICT(key) DO UPDATE SET hits=CASE WHEN window=excluded.window THEN hits+1 ELSE 1 END,window=excluded.window RETURNING hits").bind(key,window).first<{hits:number}>();
   if((row?.hits||0)>max)throw new AccountProblem("RATE_LIMIT",429);
 }
-export async function recordChat(customer:Customer,message:string,response:Record<string,unknown>) {
+export async function recordChat(customer:Customer,message:string,response:Record<string,unknown>,imageCount=0) {
   const now=Date.now();
   await database().batch([
-    ...[{role:"user",text:message},{role:"assistant",text:response.reply,service:response.service,mode:response.mode,reason:response.reason,estimate:response.estimate}].map((data,i)=>database().prepare("INSERT INTO customer_chat(id,customer_id,message_json,created_at) VALUES(?,?,?,?)").bind(crypto.randomUUID(),customer.id,JSON.stringify(data),now+i)),
+    ...[{role:"user",text:message,...(imageCount?{imageCount}: {})},{role:"assistant",text:response.reply,service:response.service,mode:response.mode,reason:response.reason,estimate:response.estimate,imageAnalysis:response.imageAnalysis}].map((data,i)=>database().prepare("INSERT INTO customer_chat(id,customer_id,message_json,created_at) VALUES(?,?,?,?)").bind(crypto.randomUUID(),customer.id,JSON.stringify(data),now+i)),
     database().prepare("DELETE FROM customer_chat WHERE customer_id=? AND id NOT IN (SELECT id FROM customer_chat WHERE customer_id=? ORDER BY created_at DESC,id DESC LIMIT 60)").bind(customer.id,customer.id),
   ]);
 }

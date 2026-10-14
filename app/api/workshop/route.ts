@@ -5,6 +5,7 @@ import {getChatGPTUser} from "@/app/chatgpt-auth";
 import {services,times,validSlot,todaySydney} from "@/lib/catalog";
 import {assistantReply} from "@/lib/assistant";
 import {openaiReply,AIError} from "@/lib/openai-assistant";
+import {validateChatImages,readChatRequest,MAX_CHAT_BODY_BYTES,ChatImageError} from "@/lib/chat-images";
 import {quickReply} from "@/lib/faq";
 import {englishCharacters,englishName,hasNonEnglishBookingText} from "@/lib/booking-input";
 import {currentCustomer,digest,recordChat} from "@/lib/customer-session";
@@ -28,7 +29,7 @@ async function own(request:Request,id:string){
 }
 async function bookingPhotos(id:string){const {results}=await database().prepare("SELECT id,booking_id,slot,name,mime,size,created_at FROM booking_photos WHERE booking_id=? AND status='ready' ORDER BY slot").bind(id).all();return results;}
 function clean(row:Record<string,any>){const {token_hash,customer_id,...safe}=row;return safe;}
-async function run(fn:()=>Promise<Response>){try{return await fn()}catch(e){if(e instanceof Problem)return reply({error:e.code},e.status);if(e instanceof z.ZodError)return reply({error:"INVALID_INPUT"},400);console.error(e instanceof Error?e.message:"Request failed");if(String(e).includes("UNIQUE constraint failed: bookings.date"))return reply({error:"SLOT_TAKEN"},409);return reply({error:"UNAVAILABLE"},503);}}
+async function run(fn:()=>Promise<Response>){try{return await fn()}catch(e){if(e instanceof ChatImageError)return reply({error:e.code},e.status);if(e instanceof Problem)return reply({error:e.code},e.status);if(e instanceof z.ZodError)return reply({error:"INVALID_INPUT"},400);console.error(e instanceof Error?e.message:"Request failed");if(String(e).includes("UNIQUE constraint failed: bookings.date"))return reply({error:"SLOT_TAKEN"},409);return reply({error:"UNAVAILABLE"},503);}}
 export async function GET(request:Request){return run(async()=>{const url=new URL(request.url);const action=url.searchParams.get("action");
  if(action==="availability"){const date=url.searchParams.get("date")||"";if(!/^\d{4}-\d{2}-\d{2}$/.test(date))throw new Problem(400,"INVALID_INPUT");const {results}=await database().prepare("SELECT time FROM bookings WHERE date=? AND status IN ('confirmed','blocked')").bind(date).all<{time:string}>();return reply({times:times.filter(t=>validSlot(date,t)&&!results.some(r=>r.time===t))});}
  if(action==="booking"){await rate(request,"lookup",30);const row=await own(request,url.searchParams.get("id")||"");return reply({booking:{...clean(row),photos:await bookingPhotos(String(row.id))}});}
@@ -37,8 +38,11 @@ export async function GET(request:Request){return run(async()=>{const url=new UR
 export async function POST(request:Request){return run(async()=>{
  if(request.headers.get("sec-fetch-site")==="cross-site"||request.headers.get("origin")&&request.headers.get("origin")!==new URL(request.url).origin)throw new Problem(403,"BAD_ORIGIN");
  if(!request.headers.get("content-type")?.includes("application/json"))throw new Problem(400,"INVALID_INPUT");
- const raw=await request.text();if(raw.length>24000)throw new Problem(413,"INVALID_INPUT");let b:any;try{b=JSON.parse(raw)}catch{throw new Problem(400,"INVALID_INPUT")}
+ const imageRequest=request.headers.get("x-chat-images")==="1";
+ if(imageRequest)await rate(request,"chat",12);
+ const raw=await readChatRequest(request,imageRequest?MAX_CHAT_BODY_BYTES:24000);let b:any;try{b=JSON.parse(raw)}catch{throw new Problem(400,"INVALID_INPUT")}
  if(!b||typeof b!=="object")throw new Problem(400,"INVALID_INPUT");
+ if(imageRequest&&b.action!=="chat")throw new Problem(400,"INVALID_INPUT");
  if(b.action==="create"){if(hasNonEnglishBookingText(b))throw new Problem(400,"ENGLISH_ONLY");await rate(request,"create",12);const d=fields.merge(slot).extend({requestId:z.string().uuid(),token:secret}).parse(b);valid(d.date,d.time);const tokenHash=await hash(d.token);const existing=await database().prepare("SELECT * FROM bookings WHERE id=?").bind(d.requestId).first<Record<string,any>>();if(existing){if(existing.token_hash!==tokenHash)throw new Problem(409,"INVALID_INPUT");return reply({booking:{...clean(existing),photos:await bookingPhotos(String(existing.id))}});}
  const customer=await currentCustomer(request);
  await database().prepare("INSERT INTO bookings(id,customer_id,token_hash,name,email,phone,vehicle,service,date,time,notes,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,'confirmed',?)").bind(d.requestId,customer?.id||null,tokenHash,d.name,d.email,d.phone,d.vehicle,d.service,d.date,d.time,d.notes,new Date().toISOString()).run();const row=await database().prepare("SELECT * FROM bookings WHERE id=?").bind(d.requestId).first<Record<string,any>>();return reply({booking:{...clean(row!),photos:[]}},201);}
@@ -49,7 +53,8 @@ export async function POST(request:Request){return run(async()=>{
  if(b.action==="block"){await admin();const d=slot.parse(b);valid(d.date,d.time);await database().prepare("INSERT INTO bookings(id,token_hash,name,email,phone,vehicle,service,date,time,notes,status,created_at) VALUES(?,'','','','','','',?,?,'','blocked',?)").bind(crypto.randomUUID(),d.date,d.time,new Date().toISOString()).run();return reply({ok:true});}
 
  if(b.action==="chat"){
-  await rate(request,"chat",12);
+  if(!imageRequest)await rate(request,"chat",12);
+  const images=validateChatImages(b.images);
   const turn=z.object({role:z.enum(["user","assistant"]),content:z.string().max(4500)});
   const d=z.object({message:z.string().trim().min(1).max(1500),lang:z.enum(["zh","en"]),history:z.array(z.union([z.string().max(1500),turn])).max(8).default([])}).parse(b);
   const history=d.history.map(h=>typeof h==="string"?{role:"user" as const,content:h}:h);
@@ -58,20 +63,23 @@ export async function POST(request:Request){return run(async()=>{
   if(Object.prototype.hasOwnProperty.call(b,"customerId")&&b.customerId!==(customer?.id||null))throw new Problem(409,"SESSION_CHANGED");
   async function chatReply(result:Record<string,unknown>){
    let saved=false;
-   if(customer){try{await recordChat(customer,d.message,result);saved=true}catch{console.warn("Chat history save unavailable")}}
+   if(customer){try{await recordChat(customer,d.message,result,images.length);saved=true}catch{console.warn("Chat history save unavailable")}}
    return reply({...result,historySaved:saved,signedIn:!!customer});
   }
   const quick=quickReply(d.message,d.lang,history.filter(h=>h.role==="user").map(h=>h.content));
-  if(quick)return chatReply(quick);
+  if(quick&&!images.length)return chatReply(quick);
   const key=env.OPENAI_API_KEY||process.env.OPENAI_API_KEY;
-  const fallback=(reason:string)=>({...assistantReply(d.message,d.lang,history.filter(h=>h.role==="user").map(h=>h.content)),mode:"rules",reason});
+  const fallback=(reason:string)=>images.length?{
+   reply:d.lang==="zh"?"图片分析暂时不可用，本次没有分析你的图片，也无法据此报价。请稍后重试，或描述症状、预约现场检查。若存在烟雾、燃油泄漏、刹车失灵或严重过热，请安全停车并联系道路救援。":"Photo analysis is unavailable. Your images have not been analysed and no image-based estimate can be given. Retry shortly, describe the symptoms or book an inspection. For smoke, fuel leaks, brake failure or severe overheating, stop safely and contact roadside assistance.",
+   service:null,estimate:null,book:false,mode:"rules",reason,imageAnalysis:"unavailable"
+  }:{...assistantReply(d.message,d.lang,history.filter(h=>h.role==="user").map(h=>h.content)),mode:"rules",reason};
   if(!key)return chatReply(fallback("not_configured"));
   const rawLimit=Number(env.AI_DAILY_REQUEST_LIMIT??"50");const limit=Number.isFinite(rawLimit)&&rawLimit>=0?Math.min(Math.floor(rawLimit),1000):50;
   if(limit===0)return chatReply(fallback("daily_limit"));
   const window=Math.floor(Date.now()/86400000);
   const used=await database().prepare("INSERT INTO rate_limits(key,window,hits) VALUES('__ai_daily',?,1) ON CONFLICT(key) DO UPDATE SET hits=CASE WHEN window=excluded.window THEN hits+1 ELSE 1 END,window=excluded.window RETURNING hits").bind(window).first<{hits:number}>();
   if((used?.hits||0)>limit)return chatReply(fallback("daily_limit"));
-  try{return chatReply(await openaiReply(key,d.message,d.lang,history));}
+  try{return chatReply(await openaiReply(key,d.message,d.lang,history,fetch,images));}
   catch(e){console.warn("OpenAI request unavailable",e instanceof AIError?e.code:"AI_UNAVAILABLE");return chatReply(fallback("temporarily_unavailable"));}
  }
  throw new Problem(400,"INVALID_INPUT");});}
