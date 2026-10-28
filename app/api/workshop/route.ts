@@ -7,14 +7,14 @@ import {assistantReply} from "@/lib/assistant";
 import {openaiReply,AIError} from "@/lib/openai-assistant";
 import {validateChatImages,readChatRequest,MAX_CHAT_BODY_BYTES,ChatImageError} from "@/lib/chat-images";
 import {quickReply} from "@/lib/faq";
-import {englishCharacters,englishName,hasNonEnglishBookingText} from "@/lib/booking-input";
+import {bookingDetailsSchema,hasNonEnglishBookingText} from "@/lib/booking-input";
 import {currentCustomer,digest,recordChat} from "@/lib/customer-session";
 export const dynamic="force-dynamic";
 class Problem extends Error{constructor(public status:number,public code:string){super(code)}}
 const reply=(data:unknown,status=200)=>Response.json(data,{status,headers:{"Cache-Control":"no-store","Referrer-Policy":"no-referrer"}});
 const service=z.enum(services.map(s=>s.id) as [string,...string[]]);
 const slot=z.object({date:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),time:z.enum(times as [string,...string[]])});
-const fields=z.object({name:z.string().trim().min(1).max(80).regex(englishName),email:z.string().trim().email().max(150).regex(englishCharacters),phone:z.string().trim().regex(/^[+\d ()-]{6,30}$/),vehicle:z.string().trim().min(2).max(120).regex(englishCharacters),service,notes:z.string().trim().max(1000).regex(englishCharacters).default("")});
+const fields=bookingDetailsSchema.extend({service});
 const secret=z.string().regex(/^[a-f0-9]{64}$/);
 async function hash(v:string){return [...new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(v)))].map(n=>n.toString(16).padStart(2,"0")).join("");}
 function valid(d:string,t:string){if(!validSlot(d,t))throw new Problem(400,"INVALID_SLOT");}
