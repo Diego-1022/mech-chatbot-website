@@ -10,7 +10,11 @@
   "preview_urls": false,
   "vars": {
     "ADMIN_EMAIL": "diegohu1022@gmail.com",
-    "AI_DAILY_REQUEST_LIMIT": "50"
+    "AI_DAILY_REQUEST_LIMIT": "50",
+    "TURNSTILE_SITE_KEY": "0x4AAAAAAFy9De8AA0ajmpyQ",
+    "TURNSTILE_REQUIRED": "true",
+    "EMAIL_VERIFICATION_ENABLED": "false",
+    "PUBLIC_SITE_URL": "https://harbour-auto-workshop.diegohu1022.workers.dev"
   },
   "d1_databases": [
     {

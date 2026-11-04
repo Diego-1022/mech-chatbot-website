@@ -4,7 +4,7 @@ import {database} from "@/db";
 const COOKIE = "harbour_customer";
 const DAYS = 7 * 86400;
 export {passwordHash,passwordMatches} from "./customer-password";
-export type Customer = {id:string;name:string;email:string};
+export type Customer = {id:string;name:string;email:string;emailVerifiedAt:string|null};
 export class AccountProblem extends Error {
   constructor(public code:string, public status=400) {super(code);}
 }
@@ -17,7 +17,7 @@ export function customerToken(request:Request) {
 }
 export async function currentCustomer(request:Request):Promise<Customer|null> {
   const token=customerToken(request);if(!token)return null;
-  return database().prepare("SELECT c.id,c.name,c.email FROM customers c JOIN customer_sessions s ON s.customer_id=c.id WHERE s.token_hash=? AND s.expires_at>?").bind(await digest(token),Date.now()).first<Customer>();
+  return database().prepare("SELECT c.id,c.name,c.email,c.email_verified_at AS emailVerifiedAt FROM customers c JOIN customer_sessions s ON s.customer_id=c.id WHERE s.token_hash=? AND s.expires_at>?").bind(await digest(token),Date.now()).first<Customer>();
 }
 export async function newSession(customerId:string,request:Request) {
   const token=randomBytes(32).toString("hex");
