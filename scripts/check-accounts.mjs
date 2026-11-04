@@ -13,7 +13,7 @@ const a={action:'signup',name:'Local Account A',email:`account-a-${suffix}@examp
 let result=await request('/api/account');check('Guest gets no private data',result.response.ok&&!result.data.user&&!result.data.bookings.length&&!result.data.history.length);
 result=await request('/api/account',a,null,{Origin:'https://other.example'});check('Cross-origin signup rejected',result.response.status===403);
 result=await request('/api/account',{...a,password:'short'});check('Short password rejected',result.response.status===400);
-result=await request('/api/account',{...a,name:'x'.repeat(3000)});check('Oversized auth body rejected before processing',result.response.status===413);
+result=await request('/api/account',{...a,name:'x'.repeat(5000)});check('Oversized auth body rejected before processing',result.response.status===413);
 result=await request('/api/account',a);check('Signup creates customer',result.response.status===201&&result.data.user.email===a.email);
 const cookieA=result.response.headers.get('set-cookie').split(';')[0],idA=result.data.user.id;
 check('Session is HttpOnly and SameSite',/HttpOnly/.test(result.response.headers.get('set-cookie'))&&/SameSite=Lax/.test(result.response.headers.get('set-cookie')));

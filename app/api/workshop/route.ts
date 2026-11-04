@@ -8,7 +8,8 @@ import {openaiReply,AIError} from "@/lib/openai-assistant";
 import {validateChatImages,readChatRequest,MAX_CHAT_BODY_BYTES,ChatImageError} from "@/lib/chat-images";
 import {quickReply} from "@/lib/faq";
 import {bookingDetailsSchema,hasNonEnglishBookingText} from "@/lib/booking-input";
-import {currentCustomer,digest,recordChat} from "@/lib/customer-session";
+import {currentCustomer,digest,recordChat,AccountProblem} from "@/lib/customer-session";
+import {verifyHuman,paidChatAllowed,emailVerificationEnabled} from "@/lib/abuse-protection";
 export const dynamic="force-dynamic";
 class Problem extends Error{constructor(public status:number,public code:string){super(code)}}
 const reply=(data:unknown,status=200)=>Response.json(data,{status,headers:{"Cache-Control":"no-store","Referrer-Policy":"no-referrer"}});
@@ -29,7 +30,7 @@ async function own(request:Request,id:string){
 }
 async function bookingPhotos(id:string){const {results}=await database().prepare("SELECT id,booking_id,slot,name,mime,size,created_at FROM booking_photos WHERE booking_id=? AND status='ready' ORDER BY slot").bind(id).all();return results;}
 function clean(row:Record<string,any>){const {token_hash,customer_id,...safe}=row;return safe;}
-async function run(fn:()=>Promise<Response>){try{return await fn()}catch(e){if(e instanceof ChatImageError)return reply({error:e.code},e.status);if(e instanceof Problem)return reply({error:e.code},e.status);if(e instanceof z.ZodError)return reply({error:"INVALID_INPUT"},400);console.error(e instanceof Error?e.message:"Request failed");if(String(e).includes("UNIQUE constraint failed: bookings.date"))return reply({error:"SLOT_TAKEN"},409);return reply({error:"UNAVAILABLE"},503);}}
+async function run(fn:()=>Promise<Response>){try{return await fn()}catch(e){if(e instanceof AccountProblem)return reply({error:e.code},e.status);if(e instanceof ChatImageError)return reply({error:e.code},e.status);if(e instanceof Problem)return reply({error:e.code},e.status);if(e instanceof z.ZodError)return reply({error:"INVALID_INPUT"},400);console.error(e instanceof Error?e.message:"Request failed");if(String(e).includes("UNIQUE constraint failed: bookings.date"))return reply({error:"SLOT_TAKEN"},409);return reply({error:"UNAVAILABLE"},503);}}
 export async function GET(request:Request){return run(async()=>{const url=new URL(request.url);const action=url.searchParams.get("action");
  if(action==="availability"){const date=url.searchParams.get("date")||"";if(!/^\d{4}-\d{2}-\d{2}$/.test(date))throw new Problem(400,"INVALID_INPUT");const {results}=await database().prepare("SELECT time FROM bookings WHERE date=? AND status IN ('confirmed','blocked')").bind(date).all<{time:string}>();return reply({times:times.filter(t=>validSlot(date,t)&&!results.some(r=>r.time===t))});}
  if(action==="booking"){await rate(request,"lookup",30);const row=await own(request,url.searchParams.get("id")||"");return reply({booking:{...clean(row),photos:await bookingPhotos(String(row.id))}});}
@@ -74,11 +75,15 @@ export async function POST(request:Request){return run(async()=>{
    service:null,estimate:null,book:false,mode:"rules",reason,imageAnalysis:"unavailable"
   }:{...assistantReply(d.message,d.lang,history.filter(h=>h.role==="user").map(h=>h.content)),mode:"rules",reason};
   if(!key)return chatReply(fallback("not_configured"));
+  await verifyHuman(request,b.humanToken,"chat");
+  if(emailVerificationEnabled()&&(!customer||!customer.emailVerifiedAt))throw new Problem(403,"EMAIL_VERIFICATION_REQUIRED");
+  if(!await paidChatAllowed(request,customer?.id))return chatReply(fallback("personal_limit"));
   const rawLimit=Number(env.AI_DAILY_REQUEST_LIMIT??"50");const limit=Number.isFinite(rawLimit)&&rawLimit>=0?Math.min(Math.floor(rawLimit),1000):50;
   if(limit===0)return chatReply(fallback("daily_limit"));
   const window=Math.floor(Date.now()/86400000);
   const used=await database().prepare("INSERT INTO rate_limits(key,window,hits) VALUES('__ai_daily',?,1) ON CONFLICT(key) DO UPDATE SET hits=CASE WHEN window=excluded.window THEN hits+1 ELSE 1 END,window=excluded.window RETURNING hits").bind(window).first<{hits:number}>();
-  if((used?.hits||0)>limit)return chatReply(fallback("daily_limit"));
+  if(!used)throw new Problem(503,"UNAVAILABLE");
+  if(used.hits>limit)return chatReply(fallback("daily_limit"));
   try{return chatReply(await openaiReply(key,d.message,d.lang,history,fetch,images));}
   catch(e){console.warn("OpenAI request unavailable",e instanceof AIError?e.code:"AI_UNAVAILABLE");return chatReply(fallback("temporarily_unavailable"));}
  }
