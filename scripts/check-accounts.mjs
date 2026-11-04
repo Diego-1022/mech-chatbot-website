@@ -13,7 +13,6 @@ const a={action:'signup',name:'Local Account A',email:`account-a-${suffix}@examp
 let result=await request('/api/account');check('Guest gets no private data',result.response.ok&&!result.data.user&&!result.data.bookings.length&&!result.data.history.length);
 result=await request('/api/account',a,null,{Origin:'https://other.example'});check('Cross-origin signup rejected',result.response.status===403);
 result=await request('/api/account',{...a,password:'short'});check('Short password rejected',result.response.status===400);
-result=await request('/api/account',{...a,name:'x'.repeat(5000)});check('Oversized auth body rejected before processing',result.response.status===413);
 result=await request('/api/account',a);check('Signup creates customer',result.response.status===201&&result.data.user.email===a.email);
 const cookieA=result.response.headers.get('set-cookie').split(';')[0],idA=result.data.user.id;
 check('Session is HttpOnly and SameSite',/HttpOnly/.test(result.response.headers.get('set-cookie'))&&/SameSite=Lax/.test(result.response.headers.get('set-cookie')));
@@ -72,4 +71,5 @@ for(const route of ['/','/services','/team','/contact','/account','/terms']) {co
 let limited=false;
 for(let i=0;i<21;i++){result=await request('/api/account',{action:'login',email:a.email,password:'incorrect-password-for-rate-check'});if(result.response.status===429){limited=true;break}}
 check('Authentication attempts are rate-limited',limited);
+result=await request('/api/account',{...a,name:'x'.repeat(5000)});check('Oversized auth body rejected before processing',result.response.status===413);
 console.log(`${passed} account/navigation checks passed. Local synthetic data only; no paid AI requests.`);
