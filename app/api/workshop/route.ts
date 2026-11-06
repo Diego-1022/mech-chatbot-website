@@ -10,6 +10,7 @@ import {quickReply} from "@/lib/faq";
 import {bookingDetailsSchema,hasNonEnglishBookingText} from "@/lib/booking-input";
 import {currentCustomer,digest,recordChat,AccountProblem} from "@/lib/customer-session";
 import {verifyHuman,paidChatAllowed,emailVerificationEnabled} from "@/lib/abuse-protection";
+import {draftSchema,extractBooking,bookingStatus} from "@/lib/conversation-booking";
 export const dynamic="force-dynamic";
 class Problem extends Error{constructor(public status:number,public code:string){super(code)}}
 const reply=(data:unknown,status=200)=>Response.json(data,{status,headers:{"Cache-Control":"no-store","Referrer-Policy":"no-referrer"}});
@@ -44,8 +45,25 @@ export async function POST(request:Request){return run(async()=>{
  const raw=await readChatRequest(request,imageRequest?MAX_CHAT_BODY_BYTES:24000);let b:any;try{b=JSON.parse(raw)}catch{throw new Problem(400,"INVALID_INPUT")}
  if(!b||typeof b!=="object")throw new Problem(400,"INVALID_INPUT");
  if(imageRequest&&b.action!=="chat")throw new Problem(400,"INVALID_INPUT");
+ if(b.action==="prepareBooking"){
+  await rate(request,"chat",12);
+  const customer=await currentCustomer(request);
+  if(b.customerId!==(customer?.id||null))throw new Problem(409,"SESSION_CHANGED");
+  const data=z.object({message:z.string().trim().min(1).max(1500),lang:z.enum(["en","zh"]),draft:draftSchema.default({})}).parse(b);
+  if(/smoke|fire|fuel leak|brake failure|overheat|冒烟|着火|失灵|过热|燃油泄漏/i.test(data.message))return reply({...assistantReply(data.message,data.lang),bookingDraft:data.draft,bookingReady:false,mode:"guide"});
+  const {draft}=extractBooking(data.message,data.draft);
+  if(customer){draft.name ||= customer.name;draft.email ||= customer.email;}
+  let available:string[]=[];
+  if(draft.date&&/^\d{4}-\d{2}-\d{2}$/.test(draft.date)){
+    const {results}=await database().prepare("SELECT time FROM bookings WHERE date=? AND status IN ('confirmed','blocked')").bind(draft.date).all<{time:string}>();
+    available=times.filter(t=>validSlot(draft.date!,t)&&!results.some(r=>r.time===t));
+  }
+  const status=bookingStatus(draft,available,data.lang);
+  return reply({reply:status.reply,bookingDraft:draft,bookingReady:status.ready,available,service:draft.service,mode:"guide"});
+ }
  if(b.action==="create"){if(hasNonEnglishBookingText(b))throw new Problem(400,"ENGLISH_ONLY");await rate(request,"create",12);const d=fields.merge(slot).extend({requestId:z.string().uuid(),token:secret}).parse(b);valid(d.date,d.time);const tokenHash=await hash(d.token);const existing=await database().prepare("SELECT * FROM bookings WHERE id=?").bind(d.requestId).first<Record<string,any>>();if(existing){if(existing.token_hash!==tokenHash)throw new Problem(409,"INVALID_INPUT");return reply({booking:{...clean(existing),photos:await bookingPhotos(String(existing.id))}});}
  const customer=await currentCustomer(request);
+ if(Object.prototype.hasOwnProperty.call(b,"expectedCustomerId")&&b.expectedCustomerId!==(customer?.id||null))throw new Problem(409,"SESSION_CHANGED");
  await database().prepare("INSERT INTO bookings(id,customer_id,token_hash,name,email,phone,vehicle,service,date,time,notes,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,'confirmed',?)").bind(d.requestId,customer?.id||null,tokenHash,d.name,d.email,d.phone,d.vehicle,d.service,d.date,d.time,d.notes,new Date().toISOString()).run();const row=await database().prepare("SELECT * FROM bookings WHERE id=?").bind(d.requestId).first<Record<string,any>>();return reply({booking:{...clean(row!),photos:[]}},201);}
  if(b.action==="cancel"||b.action==="reschedule"){await rate(request,"manage",20);const row=await own(request,z.string().uuid().parse(b.id));if(row.status!=="confirmed")throw new Problem(409,"NOT_ACTIVE");
  if(b.action==="cancel"){const result=await database().prepare("UPDATE bookings SET status='cancelled' WHERE id=? AND status='confirmed'").bind(row.id).run();if(!result.meta.changes)throw new Problem(409,"NOT_ACTIVE");}
