@@ -5,6 +5,12 @@ const {extractBooking,bookingStatus,bookingIntent}=await import('data:text/javas
 let n=0;const check=(name,value)=>{assert.ok(value,name);n++;console.log('PASS '+name)};
 const today='2026-11-06';
 for(const [input,date,time] of [['Book brakes tomorrow at 10am','2026-11-07','10:00'],['帮我预约下周一上午十点','2026-11-09','10:00'],['Book 2026-11-10 at 2pm','2026-11-10','14:00'],['Book 10 November at 13:00','2026-11-10','13:00'],['November 10 at 11am','2026-11-10','11:00'],['11月10日下午两点','2026-11-10','14:00'],['the day after tomorrow at 9am','2026-11-08','09:00']]){const {draft}=extractBooking(input,{},today);check(input,draft.date===date&&draft.time===time)}
+check('Tomorrow morning shorthand',extractBooking('我想预约明早十点给我的2020年凯美瑞保养 可以吗',{},today).draft.date==='2026-11-07'&&extractBooking('我想预约明早十点给我的2020年凯美瑞保养 可以吗',{},today).draft.time==='10:00');
+check('Bare name answers current question',extractBooking('Diego Hu',{awaiting:'name'},today).draft.name==='Diego Hu');
+check('Single first name accepted',extractBooking('Diego',{awaiting:'name'},today).draft.name==='Diego');
+check('Bare international phone accepted when requested',extractBooking('61412345678',{awaiting:'phone'},today).draft.phone==='61412345678');
+check('No arbitrary name guess outside name question',!extractBooking('Diego Hu',{},today).draft.name);
+check('Booking command does not become a name',!extractBooking('I would like to book',{awaiting:'name'},today).draft.name);
 check('Booking intent detected',bookingIntent('I would like to book tomorrow'));
 check('Cancel is not new booking intent',!bookingIntent('cancel my booking'));
 check('Ambiguous numeric dates not guessed',!extractBooking('book 11/12 at 10am',{},today).draft.date);

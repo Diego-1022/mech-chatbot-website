@@ -59,6 +59,7 @@ export async function POST(request:Request){return run(async()=>{
     available=times.filter(t=>validSlot(draft.date!,t)&&!results.some(r=>r.time===t));
   }
   const status=bookingStatus(draft,available,data.lang);
+  draft.awaiting=status.ready?undefined:status.awaiting;
   return reply({reply:status.reply,bookingDraft:draft,bookingReady:status.ready,available,service:draft.service,mode:"guide"});
  }
  if(b.action==="create"){if(hasNonEnglishBookingText(b))throw new Problem(400,"ENGLISH_ONLY");await rate(request,"create",12);const d=fields.merge(slot).extend({requestId:z.string().uuid(),token:secret}).parse(b);valid(d.date,d.time);const tokenHash=await hash(d.token);const existing=await database().prepare("SELECT * FROM bookings WHERE id=?").bind(d.requestId).first<Record<string,any>>();if(existing){if(existing.token_hash!==tokenHash)throw new Problem(409,"INVALID_INPUT");return reply({booking:{...clean(existing),photos:await bookingPhotos(String(existing.id))}});}
