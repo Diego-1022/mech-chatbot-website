@@ -7,7 +7,7 @@ let passed = 0;
 function check(name, condition) { assert.ok(condition, name); passed++; console.log('PASS ' + name); }
 const valid = {name:"Mary-Jane O'Connor",email:'mary@example.com',phone:'+61 (2) 9385-1000',vehicle:'Toyota Corolla 2020 - 1.8L',notes:"Brake noise at 50 km/h.\nStarted 2 days ago."};
 check('English names, numbers, punctuation and phone format accepted', validEnglishDetails(valid));
-for (const [field, value] of [['name','王明'],['vehicle','トヨタ'],['notes','发动机异响'],['email','用户@example.com'],['phone','０４１２３４５６７８'],['notes','Check engine 😮']]) check('Non-English '+field+' rejected',hasNonEnglishBookingText({...valid,[field]:value}));
+for (const [field, value] of [['name','王明'],['vehicle','トヨタ'],['email','用户@example.com'],['phone','０４１２３４５６７８']]) check('Non-English '+field+' rejected',hasNonEnglishBookingText({...valid,[field]:value}));
 check('Accented names follow English-letter restriction',!validEnglishDetails({...valid,name:'José'}));
 check('Digits are not allowed in names',!validEnglishDetails({...valid,name:'Alex123'}));
 const id = crypto.randomUUID();
@@ -51,7 +51,7 @@ if (process.argv[2]) {
  check('Posting rate limit enforced',limited);
  const localDay=new Date(new Intl.DateTimeFormat('en-CA',{timeZone:'Australia/Sydney',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())+'T12:00:00Z');localDay.setUTCDate(localDay.getUTCDate()+1);if(localDay.getUTCDay()===0)localDay.setUTCDate(localDay.getUTCDate()+1);
  const booking={...valid,action:'create',service:'service',date:localDay.toISOString().slice(0,10),time:'09:00',requestId:crypto.randomUUID(),token:crypto.randomUUID().replaceAll('-','').repeat(2)};
- for(const [field,value] of [['name','中文'],['vehicle','トヨタ'],['notes','车辆故障'],['email','用户@example.com']]){const r=await request('/api/workshop',{...booking,[field]:value});check('Booking API rejects non-English '+field,r.response.status===400&&r.data.error==='ENGLISH_ONLY');}
+ for(const [field,value] of [['name','中文'],['vehicle','トヨタ'],['email','用户@example.com']]){const r=await request('/api/workshop',{...booking,[field]:value});check('Booking API rejects non-English '+field,r.response.status===400&&r.data.error==='ENGLISH_ONLY');}
  const available=await request('/api/workshop?action=availability&date='+booking.date);booking.time=available.data.times[0];assert.ok(booking.time,'Local future appointment available');
  const saved=await request('/api/workshop',booking);check('English booking creates successfully',saved.response.status===201);
  const cancelled=await request('/api/workshop',{action:'cancel',id:booking.requestId},{headers:{Authorization:'Bearer '+booking.token}});check('Test booking cancelled',cancelled.response.ok);

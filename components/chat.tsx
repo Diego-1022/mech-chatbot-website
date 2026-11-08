@@ -38,7 +38,7 @@ export default function Chat({open,setOpen,lang}:{open:boolean,setOpen:(v:boolea
   const text=value.trim()||t("请分析这些车辆照片，并给出下一步建议和适用的参考费用。","Please assess these vehicle photos and suggest the next step and any applicable indicative costs.");
   const history=messages.filter(m=>!m.localBooking).slice(-4).map(m=>({role:m.role,content:(m.text+(m.imageCount?` [${m.imageCount} photos were attached; originals are not available in history.]`:"")).slice(0,2200)}));
   const extracted=extractBooking(text,draft.current).draft;
-  if(!extracted.notes){const symptoms=messages.filter(m=>m.role==="user"&&!m.localBooking&&/noise|squeak|vibrat|warning|brake|overheat|start/i.test(m.text)&&/^[\x20-\x7e\r\n\t]*$/.test(m.text)&&!/@|(?:\d[ ()-]*){8}/.test(m.text)).slice(-3).map(m=>m.text).join("; ");if(symptoms)extracted.notes=symptoms.slice(0,1000);}
+  if(!extracted.notes){const symptoms=messages.filter(m=>m.role==="user"&&!m.localBooking&&/noise|squeak|vibrat|warning|brake|overheat|start|刹车|异响|抖动|故障灯|过热|启动/i.test(m.text)&&!/@|(?:\d[ ()-]*){8}/.test(m.text)).slice(-3).map(m=>m.text).join("; ");if(symptoms)extracted.notes=symptoms.slice(0,1000);}
   const preparing=bookingActive.current||bookingIntent(text)||!!(extracted.date&&extracted.time);
   try{
    const images:ChatImage[]=[];if(!preparing)for(const photo of photos)images.push(await prepareChatImage(photo.file));
