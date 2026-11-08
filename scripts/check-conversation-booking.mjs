@@ -21,6 +21,8 @@ check('Corrections retain unrelated fields',extractBooking('vehicle: 2017 Toyota
 check('Explicit vehicle correction applied',extractBooking('vehicle: 2017 Toyota Corolla',d,today).draft.vehicle==='2017 Toyota Corolla');
 const {nextBookingDate}=await import('../lib/catalog.ts');d.date=nextBookingDate();
 check('Ready only with all details and real availability',bookingStatus(d,['10:00'],'en').ready);
+const chineseNotes = extractBooking('备注：刹车有声音', d, today).draft;
+check('Chinese notes retained and ready for review',chineseNotes.notes==='刹车有声音'&&bookingStatus(chineseNotes,['10:00'],'zh').ready);
 check('Slot taken never marked ready',!bookingStatus(d,['11:00'],'en').ready);
 check('Invalid contact rejected',!bookingStatus({...d,phone:'-----'},['10:00'],'en').ready);
 check('Model alone cannot reach review',bookingStatus({...d,vehicle:'Corolla'},['10:00'],'en').awaiting==='vehicle');

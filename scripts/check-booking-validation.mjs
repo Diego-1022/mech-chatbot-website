@@ -7,8 +7,8 @@ check('Valid formatted details accepted',bookingDetailsSchema.safeParse(valid).s
 for(const phone of ['0400000000','02 9999 9999','93851000','+44 20 7946 0958','12345678','+123456789012345'])check('Supported phone '+phone,bookingDetailsSchema.safeParse({...valid,phone}).success);
 const invalid=[['phone','------'],['phone','      '],['phone','123'],['phone','1234567'],['phone','1234567890123456'],['phone','++61412345678'],['phone','04+12345678'],['vehicle','  '],['vehicle',' X '],['email','a@b'],['email','invalid-email'],['name','   '],['name','Alex123'],['name','José'],['notes','x'.repeat(1001)]];
 for(const [field,value] of invalid){const result=bookingDetailsSchema.safeParse({...valid,[field]:value});check('Rejects '+field+' '+JSON.stringify(value.slice(0,30)),!result.success);if(!result.success)check('Error attached to '+field,!!bookingFieldErrors(result.error)[field]);}
-const parsed=bookingDetailsSchema.parse({...valid,name:'  Alex  ',email:' mary@example.com ',phone:'  0400000000  ',vehicle:' Toyota Corolla 2020 ',notes:'  noise  '});
-check('Surrounding whitespace normalized consistently',parsed.name==='Alex'&&parsed.email==='mary@example.com'&&parsed.phone==='0400000000'&&parsed.vehicle==='Toyota Corolla 2020'&&parsed.notes==='noise');
+const parsed=bookingDetailsSchema.parse({...valid,name:'  Alex  ',email:' mary@example.com ',phone:'  0400000000  ',vehicle:' Toyota Corolla 2020 ',notes:'  刹车有声音  '});
+check('Surrounding whitespace normalized consistently',parsed.name==='Alex'&&parsed.email==='mary@example.com'&&parsed.phone==='0400000000'&&parsed.vehicle==='Toyota Corolla 2020'&&parsed.notes==='刹车有声音');
 check('Optional notes default to empty',bookingDetailsSchema.parse({...valid,notes:undefined}).notes==='');
 for (const vehicle of ['Corolla', 'Toyota Corolla', '2020 Corolla', 'Toyota 9999 Corolla']) {
   check('Incomplete or invalid vehicle rejected: '+vehicle, !bookingDetailsSchema.safeParse({...valid,vehicle}).success);
@@ -18,7 +18,7 @@ for (const vehicle of ['2020 Toyota Corolla', 'Toyota Corolla 2020', 'Porsche 91
 }
 check('Vehicle upper boundary accepted', bookingDetailsSchema.safeParse({...valid,vehicle:'Toyota 2020 '+'X'.repeat(108)}).success);
 check('Vehicle length above boundary rejected', !bookingDetailsSchema.safeParse({...valid,vehicle:'Toyota 2020 '+'X'.repeat(109)}).success);
-for(const [key,value] of [['name','王明'],['vehicle','トヨタ'],['phone','０４１２３４５６７８'],['notes','Check engine 😮']])check('English policy preserved for '+key,hasNonEnglishBookingText({...valid,[key]:value}));
+for(const [key,value] of [['name','王明'],['vehicle','トヨタ'],['phone','０４１２３４５６７８']])check('English policy preserved for '+key,hasNonEnglishBookingText({...valid,[key]:value}));
 
 if(process.argv[2]){
  const target=new URL(process.argv[2]);assert.ok(['localhost','127.0.0.1'].includes(target.hostname),'Local integration only');
@@ -33,10 +33,10 @@ if(process.argv[2]){
   const result=await post(body);check('API rejects '+field+' '+JSON.stringify(value),result.response.status===400&&result.data.error==='INVALID_INPUT');
   const missing=await fetch(root+'/api/workshop?action=booking&id='+body.requestId,{headers:{Authorization:'Bearer '+body.token}});check('Rejected '+field+' does not create a booking',missing.status===404);
  }
- const body={action:'create',...valid,phone:' 0400000000 ',vehicle:' Toyota Corolla 2020 ',service:'service',date,time,...identity()};
+ const body={action:'create',...valid,phone:' 0400000000 ',vehicle:' Toyota Corolla 2020 ',notes:'刹车有声音',service:'service',date,time,...identity()};
  let result=await post(body);check('Valid booking persists locally',result.response.status===201&&result.data.booking.phone==='0400000000'&&result.data.booking.vehicle==='Toyota Corolla 2020');
  result=await post(body);check('Retry remains idempotent',result.response.ok&&result.data.booking.id===body.requestId);
- const lookup=await fetch(root+'/api/workshop?action=booking&id='+body.requestId,{headers:{Authorization:'Bearer '+body.token}});check('Private lookup still works',lookup.ok&&(await lookup.json()).booking.id===body.requestId);
+ const lookup=await fetch(root+'/api/workshop?action=booking&id='+body.requestId,{headers:{Authorization:'Bearer '+body.token}});check('Private lookup still works',lookup.ok&&((saved)=>saved.id===body.requestId&&saved.notes==='刹车有声音')((await lookup.json()).booking));
  const cancelled=await fetch(root+'/api/workshop',{method:'POST',headers:{Origin:root,'Content-Type':'application/json',Authorization:'Bearer '+body.token},body:JSON.stringify({action:'cancel',id:body.requestId})});check('Synthetic booking can be cancelled',cancelled.ok);
 }
 console.log(`${checks} booking validation checks passed. Integration targets are local only.`);

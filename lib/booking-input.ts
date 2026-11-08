@@ -6,7 +6,7 @@ export const englishName = /^[A-Za-z][A-Za-z .'-]*$/;
 export const phoneCharacters = /^[+\d ()-]{6,30}$/;
 export const bookingTextKeys = ["name", "email", "phone", "vehicle", "notes"] as const;
 export function hasNonEnglishBookingText(data: Record<string, unknown>) {
-  return bookingTextKeys.some(key => typeof data[key] === "string" && !englishCharacters.test(data[key] as string));
+  return bookingTextKeys.some(key => key !== "notes" && typeof data[key] === "string" && !englishCharacters.test(data[key] as string));
 }
 export function validEnglishDetails(data: { name: string; email: string; phone: string; vehicle: string; notes: string }) {
   return !hasNonEnglishBookingText(data) && bookingDetailsSchema.safeParse(data).success;
@@ -36,7 +36,10 @@ export const bookingDetailsSchema = z.object({
   email: z.string().trim().email("BOOKING_EMAIL").max(150, "BOOKING_EMAIL").regex(englishCharacters, "BOOKING_EMAIL"),
   phone: z.string().trim().refine(validBookingPhone, "BOOKING_PHONE"),
   vehicle: z.string().trim().min(2, "BOOKING_VEHICLE").max(120, "BOOKING_VEHICLE").regex(englishCharacters, "BOOKING_VEHICLE").refine(validBookingVehicle, "BOOKING_VEHICLE"),
-  notes: z.string().trim().max(1000, "BOOKING_NOTES").regex(englishCharacters, "BOOKING_NOTES").default(""),
+  notes: z.string().trim().max(1000, "BOOKING_NOTES").refine(value => !Array.from(value).some(char => {
+    const code = char.charCodeAt(0);
+    return (code < 32 && !["\t", "\r", "\n"].includes(char)) || (code >= 127 && code <= 159);
+  }), "BOOKING_NOTES").default(""),
 });
 
 export type BookingField = typeof bookingTextKeys[number];
