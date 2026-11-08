@@ -19,11 +19,23 @@ export function validBookingPhone(value: string) {
   return phoneCharacters.test(value) && /^\+?[0-9]{8,15}$/.test(compact);
 }
 
+function validBookingVehicle(value: string) {
+  // Accept year-first and make-first entries, including numeric model names.
+  const parts = value.split(/\s+/);
+  const latestModelYear = new Date().getFullYear() + 1;
+  return parts.some((part, index) => {
+    if (!/^\d{4}$/.test(part) || Number(part) < 1886 || Number(part) > latestModelYear) return false;
+    const [make, model] = parts.filter((_, partIndex) => partIndex !== index);
+    return /^[A-Za-z][A-Za-z0-9&.'-]*$/.test(make ?? "") &&
+      /^[A-Za-z0-9][A-Za-z0-9.'+-]*$/.test(model ?? "");
+  });
+}
+
 export const bookingDetailsSchema = z.object({
   name: z.string().trim().min(1, "BOOKING_NAME").max(80, "BOOKING_NAME").regex(englishName, "BOOKING_NAME"),
   email: z.string().trim().email("BOOKING_EMAIL").max(150, "BOOKING_EMAIL").regex(englishCharacters, "BOOKING_EMAIL"),
   phone: z.string().trim().refine(validBookingPhone, "BOOKING_PHONE"),
-  vehicle: z.string().trim().min(2, "BOOKING_VEHICLE").max(120, "BOOKING_VEHICLE").regex(englishCharacters, "BOOKING_VEHICLE"),
+  vehicle: z.string().trim().min(2, "BOOKING_VEHICLE").max(120, "BOOKING_VEHICLE").regex(englishCharacters, "BOOKING_VEHICLE").refine(validBookingVehicle, "BOOKING_VEHICLE"),
   notes: z.string().trim().max(1000, "BOOKING_NOTES").regex(englishCharacters, "BOOKING_NOTES").default(""),
 });
 

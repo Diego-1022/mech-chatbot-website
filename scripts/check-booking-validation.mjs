@@ -10,9 +10,14 @@ for(const [field,value] of invalid){const result=bookingDetailsSchema.safeParse(
 const parsed=bookingDetailsSchema.parse({...valid,name:'  Alex  ',email:' mary@example.com ',phone:'  0400000000  ',vehicle:' Toyota Corolla 2020 ',notes:'  noise  '});
 check('Surrounding whitespace normalized consistently',parsed.name==='Alex'&&parsed.email==='mary@example.com'&&parsed.phone==='0400000000'&&parsed.vehicle==='Toyota Corolla 2020'&&parsed.notes==='noise');
 check('Optional notes default to empty',bookingDetailsSchema.parse({...valid,notes:undefined}).notes==='');
-check('Vehicle lower boundary accepted',bookingDetailsSchema.safeParse({...valid,vehicle:'XY'}).success);
-check('Vehicle upper boundary accepted',bookingDetailsSchema.safeParse({...valid,vehicle:'X'.repeat(120)}).success);
-check('Vehicle length above boundary rejected',!bookingDetailsSchema.safeParse({...valid,vehicle:'X'.repeat(121)}).success);
+for (const vehicle of ['Corolla', 'Toyota Corolla', '2020 Corolla', 'Toyota 9999 Corolla']) {
+  check('Incomplete or invalid vehicle rejected: '+vehicle, !bookingDetailsSchema.safeParse({...valid,vehicle}).success);
+}
+for (const vehicle of ['2020 Toyota Corolla', 'Toyota Corolla 2020', 'Porsche 911 2024', 'Mercedes-Benz C-Class 2021']) {
+  check('Complete vehicle accepted: '+vehicle, bookingDetailsSchema.safeParse({...valid,vehicle}).success);
+}
+check('Vehicle upper boundary accepted', bookingDetailsSchema.safeParse({...valid,vehicle:'Toyota 2020 '+'X'.repeat(108)}).success);
+check('Vehicle length above boundary rejected', !bookingDetailsSchema.safeParse({...valid,vehicle:'Toyota 2020 '+'X'.repeat(109)}).success);
 for(const [key,value] of [['name','王明'],['vehicle','トヨタ'],['phone','０４１２３４５６７８'],['notes','Check engine 😮']])check('English policy preserved for '+key,hasNonEnglishBookingText({...valid,[key]:value}));
 
 if(process.argv[2]){
@@ -23,7 +28,7 @@ if(process.argv[2]){
  for(let day=0;day<7;day++){const response=await fetch(root+'/api/workshop?action=availability&date='+date);const body=await response.json();if(body.times?.length){time=body.times[0];break;}date=datePlus(date,1);}
  assert.ok(time,'isolated test DB needs an available slot');
  const identity=()=>({requestId:crypto.randomUUID(),token:Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('hex')});
- for(const [field,value] of [['phone','------'],['phone','04+12345678'],['vehicle','  '],['email','a@b']]){
+ for(const [field,value] of [['phone','------'],['phone','04+12345678'],['vehicle','  '],['vehicle','corolla'],['email','a@b']]){
   const body={action:'create',...valid,service:'service',date,time,...identity(),[field]:value};
   const result=await post(body);check('API rejects '+field+' '+JSON.stringify(value),result.response.status===400&&result.data.error==='INVALID_INPUT');
   const missing=await fetch(root+'/api/workshop?action=booking&id='+body.requestId,{headers:{Authorization:'Bearer '+body.token}});check('Rejected '+field+' does not create a booking',missing.status===404);

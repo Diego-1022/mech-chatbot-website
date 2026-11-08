@@ -23,6 +23,7 @@ const {nextBookingDate}=await import('../lib/catalog.ts');d.date=nextBookingDate
 check('Ready only with all details and real availability',bookingStatus(d,['10:00'],'en').ready);
 check('Slot taken never marked ready',!bookingStatus(d,['11:00'],'en').ready);
 check('Invalid contact rejected',!bookingStatus({...d,phone:'-----'},['10:00'],'en').ready);
+check('Model alone cannot reach review',bookingStatus({...d,vehicle:'Corolla'},['10:00'],'en').awaiting==='vehicle');
 check('English booking policy retained',!bookingStatus({...d,vehicle:'丰田'},['10:00'],'zh').ready);
 check('Impossible dates rejected',!bookingStatus({...d,date:'2026-11-31'},['10:00'],'en').ready);
 check('Conversation vehicle captured',extractBooking('I have a 2016 Toyota Corolla, with brake noise',{},today).draft.vehicle==='2016 Toyota Corolla');
