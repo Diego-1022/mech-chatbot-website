@@ -9,7 +9,7 @@ import {PhotoSelection,type SelectedPhoto} from "./booking-photos";
 import {prepareChatImage} from "@/lib/prepare-chat-images";
 import {imageDisclaimer,type ChatImage} from "@/lib/chat-images";
 type Message={localBooking?:boolean;role:"user"|"assistant";text:string;service?:string;book?:boolean;mode?:string;reason?:string;images?:ChatImage[];imageCount?:number;imageAnalysis?:string;estimate?:{min:number;max:number;currency:string;service:string}|null};
-export default function Chat({open,setOpen,lang}:{open:boolean,setOpen:(v:boolean)=>void,lang:Lang}){
+export default function Chat({open,setOpen,lang,hideLauncherOnMobile=false}:{open:boolean,setOpen:(v:boolean)=>void,lang:Lang,hideLauncherOnMobile?:boolean}){
  const t=(z:string,e:string)=>lang==="zh"?z:e;
  const [messages,setMessages]=useState<Message[]>([]),[input,setInput]=useState(""),[busy,setBusy]=useState(false),[error,setError]=useState(""),[booking,setBooking]=useState<string|null>(null),[mode,setMode]=useState("loading"),[historyLoading,setHistoryLoading]=useState(false),[signedIn,setSignedIn]=useState(false),[historyWarning,setHistoryWarning]=useState(false);
  const [protection,setProtection]=useState<Protection>(),[humanToken,setHumanToken]=useState(""),[humanReset,setHumanReset]=useState(0);
@@ -61,7 +61,7 @@ export default function Chat({open,setOpen,lang}:{open:boolean,setOpen:(v:boolea
   }catch(e){setError((e as Error).message);setInput(value);if(appended)setMessages(m=>m.slice(0,-1));if(photos.length)setShowPhotos(true)}
   finally{setHumanToken("");setHumanReset(v=>v+1);sending.current=false;setBusy(false)}
  }
- return <><button className="chat-launch" onClick={()=>setOpen(true)}><MessageCircle size={21}/>{t("咨询与预约","Ask & book")}</button>
+ return <><button className={hideLauncherOnMobile?"chat-launch chat-launch--booking-visible":"chat-launch"} onClick={()=>setOpen(true)}><MessageCircle size={21}/>{t("咨询与预约","Ask & book")}</button>
  <Dialog open={open} onOpenChange={setOpen}><DialogContent className="chat-dialog sm:max-w-lg">
  <div className="chat-head"><DialogTitle>{booking?t("安排预约","Book a visit"):t("Harbour 咨询助手","Harbour assistant")}</DialogTitle><DialogDescription className="mt-1 text-sm">{mode==="ai"?t("OpenAI 智能助手 · 初步建议，不代替现场检查","Powered by OpenAI · guidance, not a confirmed diagnosis"):mode==="guide"?t("店铺指南 · 标准服务资料，本次无需调用 AI","Workshop guide · standard information, no AI call needed"):mode==="rules"?t("基础规则助手 · 本次未使用 AI 模型","Basic rule guidance · AI is not active for this reply"):t("车辆咨询与预约","Car care & appointments")}</DialogDescription></div>
  {booking?<div className="chat-messages chat-booking" style={{display:"block"}}><button className="link" style={{marginBottom:18}} onClick={()=>{setBooking(null);if(bookingCompleted.current){draft.current={};bookingPhotos.current=[];bookingActive.current=false;bookingCompleted.current=false;setMessages([])}}}>{t("返回对话","Back to chat")}</button><Booking key={JSON.stringify(draft.current)} lang={lang} initialService={booking} initialDraft={draft.current} initialPhotos={bookingPhotos.current} expectedCustomerId={customerId.current} onDone={()=>{bookingCompleted.current=true}}/></div>:
