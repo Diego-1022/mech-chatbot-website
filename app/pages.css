@@ -52,3 +52,7 @@
 .chat-composer .human-check{margin:0;padding:0 15px}
 .chat-composer .human-check iframe{display:block}
 .chat-verification-status{padding:8px 15px;color:#f4d77e}
+
+@media (max-width: 640px) {
+  .chat-launch.chat-launch--booking-visible { display: none; }
+}

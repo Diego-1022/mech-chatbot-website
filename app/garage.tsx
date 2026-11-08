@@ -14,6 +14,18 @@ import {SiteHeader,SiteFooter} from "@/components/site-shell";
 export default function Garage() {
   const [lang, setLang] = useLanguage();
   const [chat, setChat] = useState(false);
+  const [bookingVisible, setBookingVisible] = useState(false);
+  const bookingSection = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const section = bookingSection.current;
+    if (!section) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      setBookingVisible(entry.isIntersecting);
+    });
+    observer.observe(section);
+    return () => observer.disconnect();
+  }, []);
   const [chosen, setChosen] = useState("service");
   const [active, setActive] = useState(0);
   const [wheelHovered, setWheelHovered] = useState(false);
@@ -171,13 +183,13 @@ export default function Garage() {
           <a className="kw-scroll-hint" href="#booking"><ArrowDown size={18}/><strong>{t("向下滑动，预约到店", "Scroll down to book a visit")}</strong><span>{t("在轮胎以外的区域滚动", "Scroll outside the wheel")}</span></a>
         </div>
       </section>
-      <section className="kw-booking-section" id="booking">
+      <section ref={bookingSection} className="kw-booking-section" id="booking">
         <div className="kw-booking-copy ui-reveal"><p className="eyebrow">{t("安排下一次到店", "YOUR NEXT VISIT")}</p><h2>{t("选好时间。", "Pick a time.")}<br/>{t("我们到时见。", "We'll see you then.")}</h2><p className="kw-lede">{t("选择服务和到店时段，填写车辆资料，再确认预约。", "Choose a service and check-in time, add your vehicle details and review your booking.")}</p><div className="kw-booking-benefits"><p><Clock3 size={22}/>{t("24 小时在线预约", "Online booking, 24 hours a day")}</p><p><ShieldCheck size={22}/>{t("私人链接管理预约", "A private link to manage your visit")}</p></div><p className="small muted">{t("到店接待时段不代表维修完成时间。", "Appointments reserve a check-in time, not a repair completion time.")}</p></div>
         <div className="booking-card ui-reveal"><h3>{t("预约到店", "Book your visit")}</h3><div className="summary"><CalendarDays size={22}/><div><b>{t("悉尼当地时间", "Sydney local time")}</b><p>{t("周一至周五 09:00–17:00 · 周六 09:00–12:00", "Mon–Fri 09:00–17:00 · Sat 09:00–12:00")}</p></div></div><Booking lang={lang} initialService={chosen}/></div>
       </section>
     </main>
     <details className="feedback-drawer" id="feedback"><summary>{t("留言与反馈", "Messages & feedback")}<span>{t("分享你的体验", "Share your experience")}</span></summary><Comments lang={lang}/></details>
     <SiteFooter lang={lang}/>
-    <Chat open={chat} setOpen={setChat} lang={lang}/>
+    <Chat open={chat} setOpen={setChat} lang={lang} hideLauncherOnMobile={bookingVisible}/>
   </>;
 }
