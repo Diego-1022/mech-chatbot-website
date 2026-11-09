@@ -2,9 +2,10 @@
 
 import {useEffect, useState, type FormEvent} from "react";
 import {errorText} from "@/lib/client";
-import {services, todaySydney, type Lang} from "@/lib/catalog";
+import {withServicePrices, todaySydney, type Lang, type ServicePrice} from "@/lib/catalog";
 
 type FinancialSummary = {
+  prices: ServicePrice[];
   receipts: {count:number; cents:number};
   forecast: {service:string; status:"requested" | "confirmed"; count:number}[];
 };
@@ -32,9 +33,10 @@ export function WorkshopFinancials({lang, revision}: {lang:Lang; revision:number
 
   function range(status: "requested" | "confirmed") {
     let low = 0, high = 0, count = 0;
+    const catalogue=withServicePrices(summary?.prices ?? []);
     for (const row of summary?.forecast ?? []) {
       if (row.status !== status) continue;
-      const service = services.find(item=>item.id===row.service);
+      const service = catalogue.find(item=>item.id===row.service);
       if (!service) continue;
       low += service.min * row.count;
       high += service.max * row.count;

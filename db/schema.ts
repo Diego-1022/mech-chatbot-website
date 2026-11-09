@@ -20,3 +20,9 @@ export const workshopReceipts = sqliteTable("workshop_receipts", {
   paidOn: text("paid_on").notNull(),
   amountCents: integer("amount_cents").notNull(),
 }, t=>[index("workshop_receipts_paid_on").on(t.paidOn)]);
+
+export const workshopPrices = sqliteTable("workshop_prices", {
+  service: text("service").primaryKey().notNull(),
+  min: integer("min").notNull(),
+  max: integer("max").notNull(),
+});

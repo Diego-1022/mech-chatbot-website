@@ -1,6 +1,7 @@
 "use client";
 import {useState,useEffect,useRef,useId} from "react";import {Check,CalendarDays,Copy} from "lucide-react";
 import {Select,SelectTrigger,SelectValue,SelectContent,SelectItem} from "@/components/ui/select";
+import {useServicePrices} from "@/hooks/use-service-prices";
 import {services,Lang,todaySydney,datePlus,nextBookingDate,serviceName} from "@/lib/catalog";import {api,errorText} from "@/lib/client";
 import {englishCharacters,bookingDetailsSchema,bookingFieldErrors,bookingTextKeys,type BookingField,type BookingFieldErrors} from "@/lib/booking-input";
 import {PhotoSelection,PhotoReview,PhotoGallery,type SelectedPhoto} from "@/components/booking-photos";
@@ -29,7 +30,7 @@ export default function Booking({lang,initialService="service",initialDraft,init
  const fieldState=(key:BookingField)=>({id:fieldPrefix+"-"+key,name:key,"aria-invalid":!!fieldErrors[key],"aria-describedby":fieldErrors[key]?fieldPrefix+"-"+key+"-error":undefined,onBlur:()=>validateField(key)});
  const fieldMessage=(key:BookingField)=>fieldErrors[key]?<span className="booking-field-error" id={fieldPrefix+"-"+key+"-error"}>{errorText(fieldErrors[key]!,lang)}</span>:null;
  const [photosChecking,setPhotosChecking]=useState(false);const [photos,setPhotos]=useState<SelectedPhoto[]>(initialPhotos),[savedPhotos,setSavedPhotos]=useState<BookingPhoto[]>([]),[uploadingName,setUploadingName]=useState(""),[photoFailures,setPhotoFailures]=useState<{name:string,code:string}[]>([]);const uploadedIds=useRef(new Set<string>());
- useEffect(()=>{setService(initialService)},[initialService]);const s=services.find(x=>x.id===service)!;
+ useEffect(()=>{setService(initialService)},[initialService]);const catalogue=useServicePrices();const s=catalogue.find(x=>x.id===service)!;
  const update=(key:keyof typeof form,value:string)=>{if((key!=="notes"&&!englishCharacters.test(value))||(key==="name"&&!/^[A-Za-z .'-]*$/.test(value))||(key==="phone"&&!/^[+\d ()-]*$/.test(value))){setError("ENGLISH_ONLY");return;}setError("");setFieldErrors(errors=>({...errors,[key]:undefined}));setForm(f=>({...f,[key]:value}));};
  async function uploadImages(bookingId:string,credential:string){const failures:{name:string,code:string}[]=[];setPhotoFailures([]);for(let slot=0;slot<photos.length;slot++){const photo=photos[slot];if(uploadedIds.current.has(photo.id))continue;setUploadingName(photo.file.name);try{const response=await fetch(`/api/booking-photos?booking=${encodeURIComponent(bookingId)}&image=${encodeURIComponent(photo.id)}&slot=${slot}`,{method:"POST",headers:{"Content-Type":photoMime(photo.file),"X-File-Name":encodeURIComponent(photo.file.name.slice(0,160)),"X-File-Size":String(photo.file.size),Authorization:"Bearer "+credential},body:photo.file});const data=await response.json() as {error?:string,photo:BookingPhoto};if(!response.ok)throw new Error(data.error||"UPLOADS_UNAVAILABLE");uploadedIds.current.add(photo.id);setSavedPhotos(previous=>[...previous.filter(item=>item.id!==photo.id),data.photo].sort((a,b)=>a.slot-b.slot));}catch(error){failures.push({name:photo.file.name,code:(error as Error).message});}}setUploadingName("");setPhotoFailures(failures);return failures.length===0;}
  async function retryPhotos(){if(!result||!identity.current||busy)return;setBusy(true);try{await uploadImages(result.id,identity.current.token);}finally{setBusy(false);}}
