@@ -85,6 +85,61 @@ export function WorkshopWeek({date, entries, lang, onDate}: {
   </section>;
 }
 
+function RequestReply({date, time, available, lang}: {
+  date:string; time:string; available:string[]; lang:Lang;
+}) {
+  const t = (zh:string,en:string) => lang === "zh" ? zh : en;
+  const [draft, setDraft] = useState<string | null>(null);
+  const [copyStatus, setCopyStatus] = useState<"copied" | "failed" | null>(null);
+
+  function generate() {
+    const alternatives = available.join(t("、", ", "));
+    let message: string;
+    if (available.includes(time)) {
+      message = t(
+        `您询问的 ${date} ${time}（悉尼时间）目前有空。请回复确认这个时间是否适合您。预约以我们另行发出的确认为准。`,
+        `Your requested time of ${time} on ${date} (Sydney time) is currently available. Please let us know if that still suits you. We’ll confirm the booking separately.`,
+      );
+    } else if (available.length) {
+      message = t(
+        `${date} ${time}（悉尼时间）已无法预约。当天目前还有 ${alternatives} 可选。请回复您方便的时间，我们会再次核对并确认。`,
+        `${time} on ${date} (Sydney time) is unavailable. These times are currently open that day: ${alternatives}. Please let us know which suits you so we can recheck and confirm.`,
+      );
+    } else {
+      message = t(
+        `${date} 目前没有可预约时段。请回复您方便的其他日期，我们会查看可用时间。`,
+        `We have no available appointments on ${date}. Please send us another date that suits you so we can check availability.`,
+      );
+    }
+    setDraft(t("您好，\n\n感谢您联系我们预约。", "Hello,\n\nThanks for getting in touch about an appointment.") +
+      " " + message + t("\n\nHarbour Auto 团队", "\n\nHarbour Auto team"));
+    setCopyStatus(null);
+  }
+
+  async function copy() {
+    if (!draft?.trim()) return;
+    try {
+      await navigator.clipboard.writeText(draft);
+      setCopyStatus("copied");
+    } catch {
+      setCopyStatus("failed");
+    }
+  }
+
+  return <div>
+    {draft === null && <button type="button" className="secondary" onClick={generate}>{t("生成邮件回复草稿","Generate email reply")}</button>}
+    {draft !== null && <>
+      <label className="field">{t("邮件回复草稿","Email reply draft")}
+        <textarea rows={7} value={draft} onChange={e=>{setDraft(e.target.value);setCopyStatus(null);}}/>
+      </label>
+      <button type="button" className="secondary" disabled={!draft.trim()} onClick={copy}>{t("复制回复","Copy reply")}</button>
+      {copyStatus && <p className="small" role="status">{copyStatus === "copied"
+        ? t("已复制。","Reply copied.")
+        : t("无法访问剪贴板，请手动复制。","Clipboard unavailable. Copy the draft manually.")}</p>}
+    </>}
+  </div>;
+}
+
 export function WorkshopRequest({date, lang, busy, onCreate}: {
   date:string; lang:Lang; busy:boolean; onCreate:(payload:Record<string,unknown>)=>Promise<boolean>;
 }) {
@@ -193,6 +248,10 @@ export function WorkshopRequest({date, lang, busy, onCreate}: {
             : selectedIsAvailable ? t("✓ 当前空闲，确认前不会保留。","✓ Available now. The slot is held only after confirmation.")
             : t("✕ 时段有冲突。可以选择其他时间，或先保存客户原本的请求。","✕ This time clashes. Choose another time or save the customer's original request.")}
         </p>}
+        {selectedTime && availableTimes && <RequestReply
+          key={JSON.stringify([requestDate,selectedTime,availableTimes,lang])}
+          date={requestDate} time={selectedTime} available={availableTimes} lang={lang}
+        />}
         <label className="field">{t("备注","Notes")}<textarea name="notes" rows={2} maxLength={1000}/></label>
         <button className="primary" disabled={!opening.length}>{t("保存待确认请求","Save request")}</button>
       </fieldset>
