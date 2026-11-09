@@ -15,3 +15,12 @@ export function validSlot(date:string,time:string){if(!/^\d{4}-\d{2}-\d{2}$/.tes
 
 /** Start on the next opening day rather than a closed Sunday. */
 export function nextBookingDate(today=todaySydney()){const next=datePlus(today,1);return new Date(next+"T12:00:00Z").getUTCDay()===0?datePlus(next,1):next;}
+
+export type ServicePrice = {service:string; min:number; max:number};
+
+export function withServicePrices(prices: readonly ServicePrice[]) {
+  return services.map(item => {
+    const price = prices.find(row => row.service === item.id);
+    return price ? {...item,min:price.min,max:price.max} : item;
+  });
+}

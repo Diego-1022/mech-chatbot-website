@@ -1,6 +1,6 @@
 import {services,Lang} from "./catalog";
 import {workshopContact} from "./workshop-info";
-export function assistantReply(message:string,lang:Lang,history:string[]=[]){
+export function assistantReply(message:string,lang:Lang,history:string[]=[],catalogue=services){
  const t=(z:string,e:string)=>lang==="zh"?z:e; const m=message.toLowerCase(); const all=[...history.slice(-5),message].join(" ").toLowerCase();
  const urgent=/失灵|冒烟|着火|燃油泄漏|刹不住|smoke|fire|fuel leak|brake failure|overheat|过热/.test(m);
  if(urgent)return {reply:t("这些症状可能涉及行车安全。请先在安全位置停车；如果车辆冒烟、过热、燃油泄漏或刹车失灵，不要继续驾驶。联系道路救援或合格维修人员。无法仅凭描述确认车辆是否安全。","These symptoms may involve safety. Stop in a safe place. Do not continue driving with smoke, overheating, a fuel leak or brake failure. Contact roadside assistance or a qualified technician. A description alone cannot confirm that the vehicle is safe."),service:"diagnostic"};
@@ -8,7 +8,7 @@ export function assistantReply(message:string,lang:Lang,history:string[]=[]){
  if(/地址|电话|address|phone|location|contact/.test(m))return{reply:t("地址："+workshopContact.location+"，"+workshopContact.address+"。联系电话："+workshopContact.phone+"。也可以直接使用网页上的在线预约。","Find us at "+workshopContact.location+", "+workshopContact.address+". Contact: "+workshopContact.phone+". You can also book your visit online.")};
  let id=/刹车|brake|制动/.test(all)?"brakes":/电瓶|启动|打不着|battery|start/.test(all)?"battery":/轮胎|定位|tyre|tire|align/.test(all)?"tyres":/空调|air.?con|cooling/.test(all)?"aircon":/保养|机油|service|oil/.test(all)?"service":/故障灯|异响|抖动|warning|noise|vibrat|engine/.test(all)?"diagnostic":undefined;
  if(/预约|booking|book|appointment/.test(m))return{reply:t("可以。点击下方“安排预约”，选择服务、日期和空闲时段，填写资料后会先展示确认摘要。只有提交成功后才会生成预约编号。","Yes. Choose “Book a visit” below, select a service, date and available time, then review your details. Your booking number is created only after the reservation is saved."),service:id||"diagnostic",book:true};
- const s=services.find(x=>x.id===id);
+ const s=catalogue.find(x=>x.id===id);
  if(s){const reasons:Record<string,string[]>={brakes:["刹车异响可能与刹车片磨损或刹车盘状态有关，需要检查确认。","Brake noise can relate to pad wear or rotor condition; inspection is needed."],battery:["启动困难可能涉及电瓶、接线、启动机或充电系统，需要检测区分。","Starting difficulty may involve the battery, connections, starter or charging system; testing is needed."],tyres:["跑偏或轮胎不均匀磨损可能与胎压、定位或悬挂有关。","Pulling or uneven wear may relate to tyre pressure, alignment or suspension."],aircon:["制冷不足可能涉及制冷剂泄漏、压缩机或风道，需要检查。","Weak cooling may relate to a refrigerant leak, compressor or airflow; inspection is needed."],service:["常规保养的具体项目取决于车型、里程和厂商保养计划。","Service items depend on your vehicle, mileage and manufacturer schedule."],diagnostic:["故障灯、异响或抖动可能有多种原因，需要现场检查，不能仅凭描述确定故障。","Warning lights, noise and vibration have several possible causes; an in-person inspection is needed."]};
  const pricing=t("参考价格区间：A$ "+s.min+"–"+s.max+"（"+s.zh+"）。具体项目、零件与人工需检查后确认；故障排查价格不包含后续维修。","Indicative estimate: A$ "+s.min+"–"+s.max+" for "+s.en.toLowerCase()+". Parts, labour and scope require inspection; diagnostic pricing excludes subsequent repairs.");
  return {reply:reasons[s.id][lang==="zh"?0:1]+"\n\n"+pricing+"\n\n"+t("请补充品牌／车型、年份，以及症状在什么时候出现？这是初步服务建议，具体原因需到店检查。","What is the make/model and year, and when does the symptom occur? This is initial service guidance; an inspection is needed to identify the cause."),service:s.id};}
