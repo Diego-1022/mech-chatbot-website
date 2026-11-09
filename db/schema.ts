@@ -14,3 +14,9 @@ export const workshopNotice = sqliteTable("workshop_notice", {
   messageEn: text("message_en").notNull(),
   messageZh: text("message_zh").notNull(),
 });
+
+export const workshopReceipts = sqliteTable("workshop_receipts", {
+  bookingId: text("booking_id").primaryKey().notNull().references(()=>bookings.id),
+  paidOn: text("paid_on").notNull(),
+  amountCents: integer("amount_cents").notNull(),
+}, t=>[index("workshop_receipts_paid_on").on(t.paidOn)]);
