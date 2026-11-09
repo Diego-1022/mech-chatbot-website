@@ -50,6 +50,14 @@ export async function GET(request:Request){return run(async()=>{const url=new UR
   const {results}=await database().prepare("SELECT id,date,time,service,status FROM bookings WHERE date BETWEEN ? AND ? AND status IN ('confirmed','requested','blocked','completed') ORDER BY date,time,id").bind(start,datePlus(start,6)).all();
   return reply({bookings:results});
  }
+ if(action==="adminExpenses"){
+  await admin();
+  const month=z.string().regex(/^20\d{2}-(0[1-9]|1[0-2])$/).parse(url.searchParams.get("month"));
+  const {results}=await database().prepare(
+    "SELECT id,item,supplier,kind,quantity,amount_cents,due_on,status,repeat_months FROM workshop_expenses WHERE due_on>=? AND due_on<? ORDER BY due_on,id"
+  ).bind(month+"-01",datePlus(month+"-28",4).slice(0,7)+"-01").all();
+  return reply({expenses:results});
+ }
  if(action==="adminFinancials"){
   await admin();
   const month=z.string().regex(/^20\d{2}-(0[1-9]|1[0-2])$/).parse(url.searchParams.get("month"));
@@ -98,6 +106,47 @@ export async function POST(request:Request){return run(async()=>{
  if(b.action==="cancel"||b.action==="reschedule"){await rate(request,"manage",20);const row=await own(request,z.string().uuid().parse(b.id));if(row.status!=="confirmed")throw new Problem(409,"NOT_ACTIVE");
  if(b.action==="cancel"){const result=await database().prepare("UPDATE bookings SET status='cancelled' WHERE id=? AND status='confirmed'").bind(row.id).run();if(!result.meta.changes)throw new Problem(409,"NOT_ACTIVE");}
  else{const d=slot.parse(b);valid(d.date,d.time);const result=await database().prepare("UPDATE bookings SET date=?,time=? WHERE id=? AND status='confirmed'").bind(d.date,d.time,row.id).run();if(!result.meta.changes)throw new Problem(409,"NOT_ACTIVE");}return reply({ok:true});}
+ if(b.action==="adminExpense"){
+  await admin();
+  const data=z.object({
+    id:z.string().uuid(), item:z.string().trim().min(1).max(100),supplier:z.string().trim().min(1).max(100),
+    kind:z.enum(["purchase","recurring"]),quantity:z.number().int().min(1).max(10000),
+    amountCents:z.number().int().min(1).max(100000000),dueOn:z.string().date().regex(/^20\d{2}-/),repeatMonths:z.union([z.literal(1),z.literal(3),z.literal(12)]),
+  }).parse(b);
+  await database().prepare(
+    "INSERT INTO workshop_expenses(id,item,supplier,kind,quantity,amount_cents,due_on,repeat_months,repeat_day) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING"
+  ).bind(data.id,data.item,data.supplier,data.kind,data.kind==="recurring"?1:data.quantity,data.amountCents,data.dueOn,data.kind==="recurring"?data.repeatMonths:0,Number(data.dueOn.slice(-2))).run();
+  return reply({ok:true},201);
+ }
+ if(b.action==="adminCancelExpense"){
+  await admin();
+  await database().prepare("UPDATE workshop_expenses SET status='cancelled' WHERE id=? AND status='open'")
+    .bind(z.string().uuid().parse(b.id)).run();
+  return reply({ok:true});
+ }
+ if(b.action==="adminSettleExpense"){
+  await admin();
+  const id=z.string().uuid().parse(b.id);
+  const db=database();
+  const entry=await db.prepare("SELECT due_on,repeat_months,repeat_day FROM workshop_expenses WHERE id=? AND status='open'").bind(id).first<{due_on:string;repeat_months:number;repeat_day:number}>();
+  if(!entry)return reply({ok:true});
+  const settle=db.prepare("UPDATE workshop_expenses SET status='settled' WHERE id=? AND status='open'").bind(id);
+  if(!entry.repeat_months){
+    await settle.run();
+  }else{
+    const due=new Date(entry.due_on+"T00:00:00Z");
+    due.setUTCDate(1);
+    due.setUTCMonth(due.getUTCMonth()+entry.repeat_months+1,0);
+    due.setUTCDate(Math.min(entry.repeat_day,due.getUTCDate()));
+    const nextDue=due.toISOString().slice(0,10);
+    await db.batch([
+      db.prepare("INSERT INTO workshop_expenses(id,item,supplier,kind,quantity,amount_cents,due_on,repeat_months,repeat_day) SELECT ?,item,supplier,kind,quantity,amount_cents,?,repeat_months,repeat_day FROM workshop_expenses WHERE id=? AND status='open'")
+        .bind(crypto.randomUUID(),nextDue,id),
+      settle,
+    ]);
+  }
+  return reply({ok:true});
+ }
  if(b.action==="adminPrices"){
   await admin();
   const price=z.number().int().min(0).max(1000000);
