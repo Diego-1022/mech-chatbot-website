@@ -8,6 +8,23 @@ import {readWorkshopNotice, type NoticeText} from "@/components/workshop-notice"
 
 export type CalendarEntry = {id:string; date:string; time:string; service:string; status:string};
 
+// Planning defaults for the initial service or inspection, in minutes.
+const serviceWorkMinutes: Partial<Record<string, readonly [number, number]>> = {
+  service: [60, 90],
+  brakes: [30, 60],
+  battery: [30, 45],
+  diagnostic: [45, 90],
+  tyres: [45, 75],
+  aircon: [45, 90],
+};
+
+function workEstimate(service: string, lang: Lang) {
+  const range = Object.hasOwn(serviceWorkMinutes, service) ? serviceWorkMinutes[service] : undefined;
+  if (!range) return null;
+  const [min, max] = range;
+  return lang === "zh" ? `预计工时 ${min}–${max} 分钟` : `Est. work ${min}–${max} min`;
+}
+
 export function mondayOf(date: string) {
   const weekday = new Date(date + "T12:00:00Z").getUTCDay();
   return datePlus(date, -((weekday + 6) % 7));
@@ -25,6 +42,7 @@ export function WorkshopWeek({date, entries, lang, onDate}: {
   return <section className="panel">
     <h2>{t("预约周历","Weekly appointments")}</h2>
     <p className="muted">{t("悉尼接车时段。待确认请求不占用时段。","Sydney check-in slots. Requested visits do not hold a slot.")}</p>
+    <p className="small muted">{t("预计工时按服务类型给出，仅供内部安排。实际工时视车型和检查结果而定。", "Work estimates are planning ranges by service. Actual time depends on the vehicle and inspection findings.")}</p>
     <div className="toolbar workshop-week-nav">
       <button className="secondary" onClick={() => onDate(datePlus(start,-7))}>{t("上一周","Previous week")}</button>
       <button className="secondary" onClick={() => onDate(todaySydney())}>{t("本周","This week")}</button>
@@ -44,13 +62,17 @@ export function WorkshopWeek({date, entries, lang, onDate}: {
             return <div className="workshop-slot" key={time}>
               <time>{time}</time>
               {available && <span className="workshop-available">{t("空闲","Available")}</span>}
-              {visits.map(row => <button key={row.id} onClick={() => onDate(day)}
-                className={`workshop-event workshop-event--${row.status}`} data-service={row.service}>
-                {row.status!=="blocked" && <strong>{serviceName(row.service,lang)}</strong>}
-                <span>{row.status==="requested"
-                  ? (taken ? t("待确认 · 冲突","Requested · clash") : t("待确认","Requested"))
-                  : statusLabel(row.status,lang)}</span>
-              </button>)}
+              {visits.map(row => {
+                const estimate = row.status === "confirmed" || row.status === "requested" ? workEstimate(row.service, lang) : null;
+                return <button key={row.id} onClick={() => onDate(day)}
+                  className={`workshop-event workshop-event--${row.status}`} data-service={row.service}>
+                  {row.status!=="blocked" && <strong>{serviceName(row.service,lang)}</strong>}
+                  <span>{row.status==="requested"
+                    ? (taken ? t("待确认 · 冲突","Requested · clash") : t("待确认","Requested"))
+                    : statusLabel(row.status,lang)}</span>
+                  {estimate && <span className="small">{estimate}</span>}
+                </button>;
+              })}
             </div>;
           })}
           {!times.some(time=>validSlot(day,time))&&!entries.some(row=>row.date===day)&&
