@@ -43,6 +43,13 @@
       "when": 1794200661477,
       "tag": "0005_workshop_notice",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1794202299318,
+      "tag": "0006_workshop_receipts",
+      "breakpoints": true
     }
   ]
 }

@@ -45,9 +45,21 @@ export async function GET(request:Request){return run(async()=>{const url=new UR
   const {results}=await database().prepare("SELECT id,date,time,service,status FROM bookings WHERE date BETWEEN ? AND ? AND status IN ('confirmed','requested','blocked','completed') ORDER BY date,time,id").bind(start,datePlus(start,6)).all();
   return reply({bookings:results});
  }
+ if(action==="adminFinancials"){
+  await admin();
+  const month=z.string().regex(/^20\d{2}-(0[1-9]|1[0-2])$/).parse(url.searchParams.get("month"));
+  const start=month+"-01";
+  const end=datePlus(month+"-28",4).slice(0,7)+"-01";
+  const db=database();
+  const [receipts, forecast]=await db.batch([
+    db.prepare("SELECT COUNT(*) AS count, COALESCE(SUM(amount_cents),0) AS cents FROM workshop_receipts WHERE paid_on>=? AND paid_on<?").bind(start,end),
+    db.prepare("SELECT service, status, COUNT(*) AS count FROM bookings WHERE date>=? AND date<? AND status IN ('requested','confirmed') GROUP BY service,status").bind(start,end),
+  ]);
+  return reply({receipts:receipts.results[0],forecast:forecast.results});
+ }
  if(action==="availability"){const date=url.searchParams.get("date")||"";if(!/^\d{4}-\d{2}-\d{2}$/.test(date))throw new Problem(400,"INVALID_INPUT");const {results}=await database().prepare("SELECT time FROM bookings WHERE date=? AND status IN ('confirmed','blocked')").bind(date).all<{time:string}>();return reply({times:times.filter(t=>validSlot(date,t)&&!results.some(r=>r.time===t))});}
  if(action==="booking"){await rate(request,"lookup",30);const row=await own(request,url.searchParams.get("id")||"");return reply({booking:{...clean(row),photos:await bookingPhotos(String(row.id))}});}
- if(action==="admin"){await admin();const date=url.searchParams.get("date")||todaySydney();if(!/^\d{4}-\d{2}-\d{2}$/.test(date))throw new Problem(400,"INVALID_INPUT");const {results}=await database().prepare("SELECT id,name,email,phone,vehicle,service,date,time,notes,status,created_at FROM bookings WHERE date=? ORDER BY time").bind(date).all();return reply({bookings:await Promise.all(results.map(async row=>({...row,photos:await bookingPhotos(String(row.id))})))});}
+ if(action==="admin"){await admin();const date=url.searchParams.get("date")||todaySydney();if(!/^\d{4}-\d{2}-\d{2}$/.test(date))throw new Problem(400,"INVALID_INPUT");const {results}=await database().prepare("SELECT bookings.id,name,email,phone,vehicle,service,date,time,notes,status,created_at,paid_on,amount_cents FROM bookings LEFT JOIN workshop_receipts ON bookings.id=workshop_receipts.booking_id WHERE date=? ORDER BY time").bind(date).all();return reply({bookings:await Promise.all(results.map(async row=>({...row,photos:await bookingPhotos(String(row.id))})))});}
  return reply({mode:(env.OPENAI_API_KEY||process.env.OPENAI_API_KEY)?"ai":"rules",timezone:"Australia/Sydney"});});}
 export async function POST(request:Request){return run(async()=>{
  if(request.headers.get("sec-fetch-site")==="cross-site"||request.headers.get("origin")&&request.headers.get("origin")!==new URL(request.url).origin)throw new Problem(403,"BAD_ORIGIN");
@@ -81,6 +93,20 @@ export async function POST(request:Request){return run(async()=>{
  if(b.action==="cancel"||b.action==="reschedule"){await rate(request,"manage",20);const row=await own(request,z.string().uuid().parse(b.id));if(row.status!=="confirmed")throw new Problem(409,"NOT_ACTIVE");
  if(b.action==="cancel"){const result=await database().prepare("UPDATE bookings SET status='cancelled' WHERE id=? AND status='confirmed'").bind(row.id).run();if(!result.meta.changes)throw new Problem(409,"NOT_ACTIVE");}
  else{const d=slot.parse(b);valid(d.date,d.time);const result=await database().prepare("UPDATE bookings SET date=?,time=? WHERE id=? AND status='confirmed'").bind(d.date,d.time,row.id).run();if(!result.meta.changes)throw new Problem(409,"NOT_ACTIVE");}return reply({ok:true});}
+ if(b.action==="adminReceipt"){
+  await admin();
+  const {id,paidOn,amountCents}=z.object({
+    id:z.string().uuid(),
+    paidOn:z.string().date(),
+    amountCents:z.number().int().min(1).max(100000000),
+  }).parse(b);
+  if(paidOn>todaySydney())throw new Problem(400,"INVALID_INPUT");
+  const result=await database().prepare(
+    "INSERT INTO workshop_receipts (booking_id,paid_on,amount_cents) SELECT id,?,? FROM bookings WHERE id=? AND status='completed' ON CONFLICT(booking_id) DO UPDATE SET paid_on=excluded.paid_on,amount_cents=excluded.amount_cents"
+  ).bind(paidOn,amountCents,id).run();
+  if(!result.meta.changes)throw new Problem(409,"NOT_ACTIVE");
+  return reply({ok:true});
+ }
  if(b.action==="adminRequest"){
   await admin();
   const d=fields.merge(slot).extend({requestId:z.string().uuid()}).parse(b);
