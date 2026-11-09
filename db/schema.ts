@@ -26,3 +26,16 @@ export const workshopPrices = sqliteTable("workshop_prices", {
   min: integer("min").notNull(),
   max: integer("max").notNull(),
 });
+
+export const workshopExpenses = sqliteTable("workshop_expenses", {
+  id: text("id").primaryKey(),
+  item: text("item").notNull(),
+  supplier: text("supplier").notNull(),
+  kind: text("kind",{enum:["purchase","recurring"]}).notNull(),
+  quantity: integer("quantity").notNull(),
+  amountCents: integer("amount_cents").notNull(),
+  dueOn: text("due_on").notNull(),
+  status: text("status",{enum:["open","settled","cancelled"]}).notNull().default("open"),
+  repeatMonths: integer("repeat_months").notNull(),
+  repeatDay: integer("repeat_day").notNull(),
+}, t=>[index("workshop_expenses_due").on(t.dueOn)]);

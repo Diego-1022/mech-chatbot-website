@@ -57,6 +57,13 @@
       "when": 1794202474018,
       "tag": "0007_workshop_prices",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1794202658597,
+      "tag": "0008_workshop_expenses",
+      "breakpoints": true
     }
   ]
 }
