@@ -56,3 +56,29 @@
 @media (max-width: 640px) {
   .chat-launch.chat-launch--booking-visible { display: none; }
 }
+
+.workshop-admin { max-width: 1220px; }
+.workshop-week-nav { margin: 14px 0; }
+.workshop-week-scroll { overflow-x: auto; }
+.workshop-week { display: grid; grid-template-columns: repeat(7, minmax(120px, 1fr)); min-width: 840px; gap: 8px; }
+.workshop-day { min-width: 0; border: 1px solid #a2adae; border-radius: 10px; padding: 7px; }
+.workshop-day-select { width: 100%; min-height: 40px; border: 0; border-radius: 6px; background: #233138; color: #f5f3ec; }
+.workshop-day-select[aria-pressed="true"] { background: #ffd34c; color: #182023; font-weight: 700; }
+.workshop-slot { display: grid; gap: 4px; margin-top: 7px; padding-top: 5px; border-top: 1px solid #899397; font-size: .78rem; }
+.workshop-event { display: grid; text-align: left; border: 1px solid #6f8589; border-radius: 6px; padding: 5px; color: #14272c; background: #d4e5ed; overflow-wrap: anywhere; }
+.workshop-event[data-service="service"] { background: #f9df8e; }
+.workshop-event[data-service="brakes"] { background: #fac2c3; }
+.workshop-event[data-service="battery"] { background: #c4dbff; }
+.workshop-event[data-service="diagnostic"] { background: #dfcdfc; }
+.workshop-event[data-service="tyres"] { background: #c7eac8; }
+.workshop-event[data-service="aircon"] { background: #b9e8e9; }
+.workshop-event.workshop-event--requested { border: 2px dashed #344550; background: #27383f; color: #f5f3ec; }
+.workshop-event.workshop-event--blocked { background: #d4d7d8; }
+.workshop-event.workshop-event--completed { opacity: .75; }
+.workshop-available { color: inherit; opacity: .8; }
+.workshop-form-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 14px; }
+.workshop-admin select { background: #fff; color: #182023; border: 1px solid #87969b; border-radius: 7px; padding: 8px; }
+.workshop-admin summary { cursor: pointer; font-weight: 700; }
+.workshop-notice { padding: 12px; margin: 14px 0; border-left: 4px solid #c89021; background: #fff3ce; color: #272419; overflow-wrap: anywhere; }
+.workshop-notice p { white-space: pre-wrap; }
+@media (max-width: 540px) { .workshop-form-grid { grid-template-columns: 1fr; } }

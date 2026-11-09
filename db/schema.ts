@@ -8,3 +8,9 @@ export const comments=sqliteTable("comments",{id:text("id").primaryKey(),name:te
 export const bookingPhotos=sqliteTable("booking_photos",{id:text("id").primaryKey(),bookingId:text("booking_id").notNull().references(()=>bookings.id),slot:integer("slot").notNull(),name:text("name").notNull(),mime:text("mime").notNull(),size:integer("size").notNull(),storageKey:text("storage_key").notNull(),status:text("status",{enum:["uploading","ready"]}).notNull(),uploadNonce:text("upload_nonce").notNull(),createdAt:text("created_at").notNull(),updatedAt:text("updated_at").notNull()},t=>[uniqueIndex("booking_photo_slot").on(t.bookingId,t.slot),index("booking_photos_booking").on(t.bookingId)]);
 
 export const emailVerifications=sqliteTable("email_verifications",{customerId:text("customer_id").primaryKey().references(()=>customers.id),tokenHash:text("token_hash").notNull().unique(),expiresAt:integer("expires_at").notNull()});
+
+export const workshopNotice = sqliteTable("workshop_notice", {
+  id: integer("id").primaryKey(),
+  messageEn: text("message_en").notNull(),
+  messageZh: text("message_zh").notNull(),
+});
