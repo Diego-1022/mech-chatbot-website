@@ -90,12 +90,35 @@ export function WorkshopRequest({date, lang, busy, onCreate}: {
 }) {
   const t = (zh:string,en:string) => lang === "zh" ? zh : en;
   const [requestDate, setRequestDate] = useState(date);
+  const [expanded, setExpanded] = useState(false);
+  const [availability, setAvailability] = useState<{date:string; times:string[] | null} | null>(null);
   const [service, setService] = useState(services[0].id);
   const [emailText, setEmailText] = useState("");
   const [importMessage, setImportMessage] = useState("");
   const [importedTime, setImportedTime] = useState<string | null>(null);
   const requestId = useRef<{id:string; details:string} | null>(null);
   const opening = times.filter(time=>validSlot(requestDate,time));
+
+  const selectedTime = importedTime === null ? opening[0] ?? "" : opening.includes(importedTime) ? importedTime : "";
+  const availableTimes = availability?.date === requestDate ? availability.times : undefined;
+  const selectedIsAvailable = availableTimes?.includes(selectedTime);
+
+  useEffect(() => {
+    if (!expanded || !times.some(time => validSlot(requestDate,time))) return;
+    const controller = new AbortController();
+    setAvailability(null);
+    fetch("/api/workshop?action=availability&date=" + encodeURIComponent(requestDate), {
+      signal:controller.signal, cache:"no-store",
+    }).then(async response => {
+      if (!response.ok) throw new Error("Availability unavailable");
+      const result = await response.json<{times:string[]}>();
+      if (!Array.isArray(result.times)) throw new Error("Invalid availability");
+      if (!controller.signal.aborted) setAvailability({date:requestDate,times:result.times});
+    }).catch(() => {
+      if (!controller.signal.aborted) setAvailability({date:requestDate,times:null});
+    });
+    return () => controller.abort();
+  }, [expanded,requestDate,busy]);
 
   function importEmail(event: MouseEvent<HTMLButtonElement>) {
     const form = event.currentTarget.form;
@@ -139,7 +162,7 @@ export function WorkshopRequest({date, lang, busy, onCreate}: {
     }
   }
 
-  return <details className="panel">
+  return <details className="panel" onToggle={e=>setExpanded(e.currentTarget.open)}>
     <summary>{t("添加待确认请求","Add requested appointment")}</summary>
     <p className="muted">{t("确认后才占用时段。所有时间均为悉尼当地时间。","A slot is held only after confirmation. All times are Sydney local time.")}</p>
     <form onSubmit={submit}>
@@ -152,9 +175,11 @@ export function WorkshopRequest({date, lang, busy, onCreate}: {
         {importMessage && <p className="notice" role="status">{importMessage}</p>}
         <div className="workshop-form-grid">
           <label className="field">{t("日期","Date")}<input name="date" type="date" required min={todaySydney()} max={datePlus(todaySydney(),60)} value={requestDate} onChange={e=>{setRequestDate(e.target.value);setImportedTime("");}}/></label>
-          <label className="field">{t("时间","Time")}<select name="time" required value={importedTime === null ? opening[0] ?? "" : opening.includes(importedTime) ? importedTime : ""} onChange={e=>setImportedTime(e.target.value)}>
+          <label className="field">{t("时间","Time")}<select name="time" required value={selectedTime} onChange={e=>setImportedTime(e.target.value)}>
             <option value="">{t("选择时间","Select time")}</option>
-            {opening.map(time=><option key={time}>{time}</option>)}
+            {opening.map(time=><option key={time} value={time}>
+              {time}{availableTimes && (availableTimes.includes(time) ? t(" · 空闲"," · Available") : t(" · 冲突"," · Clash"))}
+            </option>)}
           </select></label>
           <label className="field">{t("服务","Service")}<select name="service" required value={service} onChange={e=>setService(e.target.value)}>{services.map(service=><option key={service.id} value={service.id}>{service[lang]}</option>)}<option value="">{t("选择服务","Select service")}</option></select></label>
           <label className="field">{t("姓名","Name")}<input name="name" required maxLength={80}/></label>
@@ -162,6 +187,12 @@ export function WorkshopRequest({date, lang, busy, onCreate}: {
           <label className="field">{t("联系电话","Phone")}<input name="phone" type="tel" required maxLength={30}/></label>
           <label className="field">{t("车辆品牌、车型和年份","Vehicle make, model & year")}<input name="vehicle" required maxLength={120} placeholder="2020 Toyota Corolla"/></label>
         </div>
+        {selectedTime && <p className="notice" role="status">
+          {availableTimes === undefined ? t("正在检查时段…","Checking availability…")
+            : availableTimes === null ? t("暂时无法检查时段。","Availability could not be checked.")
+            : selectedIsAvailable ? t("✓ 当前空闲，确认前不会保留。","✓ Available now. The slot is held only after confirmation.")
+            : t("✕ 时段有冲突。可以选择其他时间，或先保存客户原本的请求。","✕ This time clashes. Choose another time or save the customer's original request.")}
+        </p>}
         <label className="field">{t("备注","Notes")}<textarea name="notes" rows={2} maxLength={1000}/></label>
         <button className="primary" disabled={!opening.length}>{t("保存待确认请求","Save request")}</button>
       </fieldset>
