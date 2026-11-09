@@ -64,6 +64,13 @@
       "when": 1794202658597,
       "tag": "0008_workshop_expenses",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1794202757505,
+      "tag": "0009_workshop_page_views",
+      "breakpoints": true
     }
   ]
 }

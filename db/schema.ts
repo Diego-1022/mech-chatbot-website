@@ -39,3 +39,9 @@ export const workshopExpenses = sqliteTable("workshop_expenses", {
   repeatMonths: integer("repeat_months").notNull(),
   repeatDay: integer("repeat_day").notNull(),
 }, t=>[index("workshop_expenses_due").on(t.dueOn)]);
+
+export const workshopPageViews = sqliteTable("workshop_page_views", {
+  day: text("day").notNull(),
+  page: text("page").notNull(),
+  views: integer("views").notNull(),
+}, t=>[uniqueIndex("workshop_page_views_day_page").on(t.day,t.page)]);
