@@ -1,3 +1,4 @@
+import {canSchedule, schedulingWindow, suggestedSlots, type PlanningBooking} from "@/lib/workshop-scheduling";
 import {trackedPages} from "@/lib/workshop-analytics";
 import {env} from "cloudflare:workers";
 import {z} from "zod";
@@ -37,11 +38,36 @@ async function readPrices() {
  const {results}=await database().prepare("SELECT service,min,max FROM workshop_prices").all<ServicePrice>();
  return results;
 }
+const planningCapacity=z.number().int().min(1).max(10);
+
+async function planningBooking(id:string) {
+ const booking=await database().prepare(
+  "SELECT date,time,service,vehicle,status FROM bookings WHERE id=? AND status IN ('requested','confirmed')"
+ ).bind(id).first<PlanningBooking>();
+ if(!booking)throw new Problem(409,"NOT_ACTIVE");
+ return booking;
+}
+
+async function planningJobs(id:string,start:string,end:string) {
+ const {results}=await database().prepare(
+  "SELECT date,time,service,vehicle,status FROM bookings WHERE date BETWEEN ? AND ? AND id<>? AND status IN ('confirmed','blocked')"
+ ).bind(start,end,id).all<PlanningBooking>();
+ return results;
+}
+
 export async function GET(request:Request){return run(async()=>{const url=new URL(request.url);const action=url.searchParams.get("action");
  if(action==="prices")return reply({prices:await readPrices()});
  if(action==="notice"){
   const notice=await database().prepare("SELECT message_en AS en,message_zh AS zh FROM workshop_notice WHERE id=1").first<{en:string;zh:string}>();
   return reply({notice:notice??{en:"",zh:""}});
+ }
+ if(action==="adminSchedule"){
+  await admin();
+  const id=z.string().uuid().parse(url.searchParams.get("id"));
+  const capacity=planningCapacity.parse(Number(url.searchParams.get("capacity")));
+  const booking=await planningBooking(id);
+  const {start,end}=schedulingWindow(booking);
+  return reply({slots:suggestedSlots(booking,await planningJobs(id,start,end),capacity)});
  }
  if(action==="adminWeek"){
   await admin();
@@ -196,6 +222,34 @@ export async function POST(request:Request){return run(async()=>{
   // A request is tentative and does not claim an available slot.
   await database().prepare("INSERT INTO bookings(id,token_hash,name,email,phone,vehicle,service,date,time,notes,status,created_at) VALUES(?,'',?,?,?,?,?,?,?,?,'requested',?) ON CONFLICT(id) DO NOTHING").bind(d.requestId,d.name,d.email,d.phone,d.vehicle,d.service,d.date,d.time,d.notes,new Date().toISOString()).run();
   return reply({ok:true},201);
+ }
+ if(b.action==="adminApplySchedule"){
+  await admin();
+  const data=slot.extend({
+   id:z.string().uuid(),capacity:planningCapacity,
+   originalDate:z.string().date(),originalTime:z.string(),originalStatus:z.enum(["requested","confirmed"]),
+  }).parse(b);
+  const current=await planningBooking(data.id);
+  if(current.date!==data.originalDate||current.time!==data.originalTime||current.status!==data.originalStatus)
+   throw new Problem(409,"NOT_ACTIVE");
+  const {start,end}=schedulingWindow(current);
+  const options=suggestedSlots(current,await planningJobs(data.id,start,end),data.capacity);
+  if(!options.some(option=>option.date===data.date&&option.time===data.time))
+   throw new Problem(409,"SLOT_TAKEN");
+  // Compare the day's workload in the same statement that changes the slot.
+  // A concurrent booking, closure or completion forces the administrator to recheck.
+  const daySnapshot="SELECT json_group_array(json_array(time,service,vehicle,status)) AS jobs FROM (SELECT time,service,vehicle,status FROM bookings WHERE date=? AND id<>? AND status IN ('confirmed','blocked') ORDER BY time,id)";
+  const db=database();
+  const snapshot=await db.prepare(daySnapshot).bind(data.date,data.id).first<{jobs:string}>();
+  const jobs=(JSON.parse(snapshot?.jobs??"[]") as [string,string,string,string][]).map(([time,service,vehicle,status])=>({
+   date:data.date,time,service,vehicle,status,
+  }));
+  if(!canSchedule(data,current,jobs,data.capacity))throw new Problem(409,"SLOT_TAKEN");
+  const result=await db.prepare(
+   "UPDATE bookings SET date=?,time=?,status='confirmed' WHERE id=? AND status=? AND date=? AND time=? AND ("+daySnapshot+")=?"
+  ).bind(data.date,data.time,data.id,current.status,current.date,current.time,data.date,data.id,snapshot?.jobs??"[]").run();
+  if(!result.meta.changes)throw new Problem(409,"SLOT_TAKEN");
+  return reply({ok:true});
  }
  if(b.action==="adminConfirmRequest"){
   await admin();
