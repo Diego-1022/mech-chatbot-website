@@ -2,7 +2,7 @@ import {env} from "cloudflare:workers";
 import {z} from "zod";
 import {database} from "@/db";
 import {getChatGPTUser} from "@/app/chatgpt-auth";
-import {services,times,validSlot,todaySydney} from "@/lib/catalog";
+import {services,times,validSlot,todaySydney,datePlus} from "@/lib/catalog";
 import {assistantReply} from "@/lib/assistant";
 import {openaiReply,AIError} from "@/lib/openai-assistant";
 import {validateChatImages,readChatRequest,MAX_CHAT_BODY_BYTES,ChatImageError} from "@/lib/chat-images";
@@ -33,6 +33,18 @@ async function bookingPhotos(id:string){const {results}=await database().prepare
 function clean(row:Record<string,any>){const {token_hash,customer_id,...safe}=row;return safe;}
 async function run(fn:()=>Promise<Response>){try{return await fn()}catch(e){if(e instanceof AccountProblem)return reply({error:e.code},e.status);if(e instanceof ChatImageError)return reply({error:e.code},e.status);if(e instanceof Problem)return reply({error:e.code},e.status);if(e instanceof z.ZodError)return reply({error:"INVALID_INPUT"},400);console.error(e instanceof Error?e.message:"Request failed");if(String(e).includes("UNIQUE constraint failed: bookings.date"))return reply({error:"SLOT_TAKEN"},409);return reply({error:"UNAVAILABLE"},503);}}
 export async function GET(request:Request){return run(async()=>{const url=new URL(request.url);const action=url.searchParams.get("action");
+ if(action==="notice"){
+  const notice=await database().prepare("SELECT message_en AS en,message_zh AS zh FROM workshop_notice WHERE id=1").first<{en:string;zh:string}>();
+  return reply({notice:notice??{en:"",zh:""}});
+ }
+ if(action==="adminWeek"){
+  await admin();
+  const start=url.searchParams.get("start")??"";
+  const day=new Date(start+"T12:00:00Z");
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(start)||!Number.isFinite(day.getTime())||day.toISOString().slice(0,10)!==start)throw new Problem(400,"INVALID_INPUT");
+  const {results}=await database().prepare("SELECT id,date,time,service,status FROM bookings WHERE date BETWEEN ? AND ? AND status IN ('confirmed','requested','blocked','completed') ORDER BY date,time,id").bind(start,datePlus(start,6)).all();
+  return reply({bookings:results});
+ }
  if(action==="availability"){const date=url.searchParams.get("date")||"";if(!/^\d{4}-\d{2}-\d{2}$/.test(date))throw new Problem(400,"INVALID_INPUT");const {results}=await database().prepare("SELECT time FROM bookings WHERE date=? AND status IN ('confirmed','blocked')").bind(date).all<{time:string}>();return reply({times:times.filter(t=>validSlot(date,t)&&!results.some(r=>r.time===t))});}
  if(action==="booking"){await rate(request,"lookup",30);const row=await own(request,url.searchParams.get("id")||"");return reply({booking:{...clean(row),photos:await bookingPhotos(String(row.id))}});}
  if(action==="admin"){await admin();const date=url.searchParams.get("date")||todaySydney();if(!/^\d{4}-\d{2}-\d{2}$/.test(date))throw new Problem(400,"INVALID_INPUT");const {results}=await database().prepare("SELECT id,name,email,phone,vehicle,service,date,time,notes,status,created_at FROM bookings WHERE date=? ORDER BY time").bind(date).all();return reply({bookings:await Promise.all(results.map(async row=>({...row,photos:await bookingPhotos(String(row.id))})))});}
@@ -69,7 +81,32 @@ export async function POST(request:Request){return run(async()=>{
  if(b.action==="cancel"||b.action==="reschedule"){await rate(request,"manage",20);const row=await own(request,z.string().uuid().parse(b.id));if(row.status!=="confirmed")throw new Problem(409,"NOT_ACTIVE");
  if(b.action==="cancel"){const result=await database().prepare("UPDATE bookings SET status='cancelled' WHERE id=? AND status='confirmed'").bind(row.id).run();if(!result.meta.changes)throw new Problem(409,"NOT_ACTIVE");}
  else{const d=slot.parse(b);valid(d.date,d.time);const result=await database().prepare("UPDATE bookings SET date=?,time=? WHERE id=? AND status='confirmed'").bind(d.date,d.time,row.id).run();if(!result.meta.changes)throw new Problem(409,"NOT_ACTIVE");}return reply({ok:true});}
- if(b.action==="adminStatus"){await admin();const d=z.object({id:z.string().uuid(),status:z.enum(["cancelled","completed"])}).parse(b);const result=await database().prepare("UPDATE bookings SET status=? WHERE id=? AND status IN ('confirmed','blocked')").bind(d.status,d.id).run();if(!result.meta.changes)throw new Problem(409,"NOT_ACTIVE");return reply({ok:true});}
+ if(b.action==="adminRequest"){
+  await admin();
+  const d=fields.merge(slot).extend({requestId:z.string().uuid()}).parse(b);
+  valid(d.date,d.time);
+  // A request is tentative and does not claim an available slot.
+  await database().prepare("INSERT INTO bookings(id,token_hash,name,email,phone,vehicle,service,date,time,notes,status,created_at) VALUES(?,'',?,?,?,?,?,?,?,?,'requested',?) ON CONFLICT(id) DO NOTHING").bind(d.requestId,d.name,d.email,d.phone,d.vehicle,d.service,d.date,d.time,d.notes,new Date().toISOString()).run();
+  return reply({ok:true},201);
+ }
+ if(b.action==="adminConfirmRequest"){
+  await admin();
+  const id=z.string().uuid().parse(b.id);
+  const requested=await database().prepare("SELECT date,time FROM bookings WHERE id=? AND status='requested'").bind(id).first<{date:string;time:string}>();
+  if(!requested)throw new Problem(409,"NOT_ACTIVE");
+  valid(requested.date,requested.time);
+  // The existing unique active-slot index arbitrates races with public bookings and closures.
+  const result=await database().prepare("UPDATE bookings SET status='confirmed' WHERE id=? AND status='requested'").bind(id).run();
+  if(!result.meta.changes)throw new Problem(409,"NOT_ACTIVE");
+  return reply({ok:true});
+ }
+ if(b.action==="adminNotice"){
+  await admin();
+  const {en,zh}=z.object({en:z.string().trim().max(500),zh:z.string().trim().max(500)}).parse(b);
+  await database().prepare("INSERT INTO workshop_notice(id,message_en,message_zh) VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET message_en=excluded.message_en,message_zh=excluded.message_zh").bind(en,zh).run();
+  return reply({notice:{en,zh}});
+ }
+ if(b.action==="adminStatus"){await admin();const d=z.object({id:z.string().uuid(),status:z.enum(["cancelled","completed"])}).parse(b);const result=await database().prepare("UPDATE bookings SET status=? WHERE id=? AND (status='confirmed' OR (?='cancelled' AND status IN ('blocked','requested')))").bind(d.status,d.id,d.status).run();if(!result.meta.changes)throw new Problem(409,"NOT_ACTIVE");return reply({ok:true});}
  if(b.action==="block"){await admin();const d=slot.parse(b);valid(d.date,d.time);await database().prepare("INSERT INTO bookings(id,token_hash,name,email,phone,vehicle,service,date,time,notes,status,created_at) VALUES(?,'','','','','','',?,?,'','blocked',?)").bind(crypto.randomUUID(),d.date,d.time,new Date().toISOString()).run();return reply({ok:true});}
 
  if(b.action==="chat"){
