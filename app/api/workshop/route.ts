@@ -1,3 +1,4 @@
+import {trackedPages} from "@/lib/workshop-analytics";
 import {env} from "cloudflare:workers";
 import {z} from "zod";
 import {database} from "@/db";
@@ -50,6 +51,14 @@ export async function GET(request:Request){return run(async()=>{const url=new UR
   const {results}=await database().prepare("SELECT id,date,time,service,status FROM bookings WHERE date BETWEEN ? AND ? AND status IN ('confirmed','requested','blocked','completed') ORDER BY date,time,id").bind(start,datePlus(start,6)).all();
   return reply({bookings:results});
  }
+ if(action==="adminAnalytics"){
+  await admin();
+  const today=todaySydney();
+  const {results}=await database().prepare(
+    "SELECT page,SUM(views) AS views FROM workshop_page_views WHERE day BETWEEN ? AND ? GROUP BY page"
+  ).bind(datePlus(today,-29),today).all();
+  return reply({pages:results});
+ }
  if(action==="adminExpenses"){
   await admin();
   const month=z.string().regex(/^20\d{2}-(0[1-9]|1[0-2])$/).parse(url.searchParams.get("month"));
@@ -82,6 +91,14 @@ export async function POST(request:Request){return run(async()=>{
  const raw=await readChatRequest(request,imageRequest?MAX_CHAT_BODY_BYTES:24000);let b:any;try{b=JSON.parse(raw)}catch{throw new Problem(400,"INVALID_INPUT")}
  if(!b||typeof b!=="object")throw new Problem(400,"INVALID_INPUT");
  if(imageRequest&&b.action!=="chat")throw new Problem(400,"INVALID_INPUT");
+ if(b.action==="pageView"){
+  const page=z.enum(trackedPages).parse(b.page);
+  const day=todaySydney();
+  await database().prepare(
+    "INSERT INTO workshop_page_views(day,page,views) VALUES(?,?,1) ON CONFLICT(day,page) DO UPDATE SET views=views+1"
+  ).bind(day,page).run();
+  return new Response(null,{status:204,headers:{"Cache-Control":"no-store"}});
+ }
  if(b.action==="prepareBooking"){
   await rate(request,"chat",12);
   const customer=await currentCustomer(request);
