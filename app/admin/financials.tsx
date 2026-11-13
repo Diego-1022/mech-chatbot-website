@@ -1,48 +1,82 @@
 "use client";
 
 import {useEffect, useState, type FormEvent} from "react";
-import {errorText} from "@/lib/client";
-import {withServicePrices, todaySydney, type Lang, type ServicePrice} from "@/lib/catalog";
+import {api,errorText} from "@/lib/client";
+import {todaySydney,type Lang} from "@/lib/catalog";
+import {bookingEstimate,type FinancialAnalysis,type FinancialSummary} from "@/lib/workshop-financials";
 
-type FinancialSummary = {
-  prices: ServicePrice[];
-  receipts: {count:number; cents:number};
-  forecast: {service:string; status:"requested" | "confirmed"; count:number}[];
-};
+function MonthlyAnalysis({lang,month,hasData}: {lang:Lang;month:string;hasData:boolean}) {
+  const t = (zh:string,en:string) => lang === "zh" ? zh : en;
+  const [analysis,setAnalysis] = useState<FinancialAnalysis | null>(null);
+  const [busy,setBusy] = useState(false);
+  const [empty,setEmpty] = useState(false);
+  const [error,setError] = useState("");
+
+  async function generate() {
+    setBusy(true);
+    setEmpty(false);
+    setError("");
+    setAnalysis(null);
+    try {
+      const result = await api("adminFinancialAnalysis",{month,lang});
+      setAnalysis(result.analysis);
+      setEmpty(result.analysis===null);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <section className="financial-analysis">
+    <h3>{t("AI 分析与建议","AI analysis & recommendations")}</h3>
+    {hasData && <p className="small muted">{t("生成时会将该月的汇总金额和预约数量发送给 OpenAI。","Generating an analysis sends this month’s aggregate amounts and booking counts to OpenAI.")}</p>}
+    {hasData && <button type="button" className="secondary" disabled={busy} onClick={generate}>
+      {analysis?t("重新生成分析","Regenerate analysis"):t("生成月度分析","Generate monthly analysis")}
+    </button>}
+    {busy && <p role="status">{t("正在分析所选月份…","Analysing the selected month…")}</p>}
+    {(!hasData||empty) && <p className="small muted" role="status">{t("所选月份还没有已登记收款或可分析的预约。","There are no recorded receipts or bookings to analyse for this month.")}</p>}
+    {error && <p className="error" role="alert">{error==="AI_LIMIT"
+      ? t("已达到 AI 每日使用上限，请稍后再试。","The daily AI limit has been reached. Try again later.")
+      : error==="AI_BUSY"||error==="AI_UNAVAILABLE"
+        ? t("AI 分析暂不可用，请稍后重试。","AI analysis is temporarily unavailable. Try again shortly.")
+        : errorText(error,lang)}</p>}
+    {analysis && <div aria-live="polite">
+      <p>{analysis.summary}</p>
+      <h4>{t("数据观察","Observations")}</h4>
+      <ul>{analysis.observations.map((item,index)=><li key={index}>{item}</li>)}</ul>
+      <h4>{t("建议行动","Suggested actions")}</h4>
+      <ul>{analysis.recommendations.map((item,index)=><li key={index}>{item}</li>)}</ul>
+    </div>}
+  </section>;
+}
 
 export function WorkshopFinancials({lang, revision}: {lang:Lang; revision:number}) {
   const t = (zh:string,en:string) => lang === "zh" ? zh : en;
   const [month, setMonth] = useState(todaySydney().slice(0,7));
-  const [summary, setSummary] = useState<FinancialSummary | null>(null);
+  const [loaded, setLoaded] = useState<{month:string;revision:number;summary:FinancialSummary} | null>(null);
+  const summary = loaded?.month===month && loaded.revision===revision ? loaded.summary : null;
   const [failed, setFailed] = useState(false);
   const currency = new Intl.NumberFormat(lang === "zh" ? "zh-AU" : "en-AU",{style:"currency",currency:"AUD"});
 
   useEffect(() => {
     const controller = new AbortController();
-    setSummary(null);
     setFailed(false);
     fetch("/api/workshop?action=adminFinancials&month="+encodeURIComponent(month),{signal:controller.signal})
       .then(async response => {
         if (!response.ok) throw new Error("UNAVAILABLE");
         const result = await response.json<FinancialSummary>();
-        if (!controller.signal.aborted) setSummary(result);
+        if (!controller.signal.aborted) setLoaded({month,revision,summary:result});
       })
       .catch(() => {if (!controller.signal.aborted) setFailed(true);});
     return () => controller.abort();
   }, [month,revision]);
 
   function range(status: "requested" | "confirmed") {
-    let low = 0, high = 0, count = 0;
-    const catalogue=withServicePrices(summary?.prices ?? []);
-    for (const row of summary?.forecast ?? []) {
-      if (row.status !== status) continue;
-      const service = catalogue.find(item=>item.id===row.service);
-      if (!service) continue;
-      low += service.min * row.count;
-      high += service.max * row.count;
-      count += row.count;
-    }
-    return count ? currency.format(low)+" – "+currency.format(high)+" ("+count+")" : currency.format(0);
+    if (!summary) return currency.format(0);
+    const {low,high,count,unpricedCount}=bookingEstimate(summary,status);
+    const estimate=count?currency.format(low)+" – "+currency.format(high)+" ("+count+")":currency.format(0);
+    return unpricedCount?estimate+" · "+unpricedCount+" "+t("笔未估价","unpriced"):estimate;
   }
 
   return <section className="panel">
@@ -60,6 +94,8 @@ export function WorkshopFinancials({lang, revision}: {lang:Lang; revision:number
       <dd>{range("requested")}</dd>
     </dl>}
     <p className="small muted">{t("估算使用服务目录的价格区间。已登记收款来自管理员录入的实际到账金额。","Estimates use the service catalogue’s price ranges. Recorded receipts come from payments entered by an administrator.")}</p>
+    {summary && <MonthlyAnalysis key={month+":"+revision+":"+lang} lang={lang} month={month}
+      hasData={summary.receipts.count>0||summary.forecast.length>0}/>}
   </section>;
 }
 
