@@ -7,11 +7,13 @@ import {getChatGPTUser} from "@/app/chatgpt-auth";
 import {services,times,validSlot,todaySydney,datePlus,withServicePrices,type ServicePrice} from "@/lib/catalog";
 import {assistantReply} from "@/lib/assistant";
 import {openaiReply,AIError} from "@/lib/openai-assistant";
+import {analyseFinancials} from "@/lib/openai-financials";
+import {bookingEstimate,type FinancialSummary} from "@/lib/workshop-financials";
 import {validateChatImages,readChatRequest,MAX_CHAT_BODY_BYTES,ChatImageError} from "@/lib/chat-images";
 import {quickReply} from "@/lib/faq";
 import {bookingDetailsSchema,hasNonEnglishBookingText} from "@/lib/booking-input";
 import {currentCustomer,digest,recordChat,AccountProblem} from "@/lib/customer-session";
-import {verifyHuman,paidChatAllowed,emailVerificationEnabled} from "@/lib/abuse-protection";
+import {verifyHuman,paidChatAllowed,emailVerificationEnabled,budget,paidAIAllowed} from "@/lib/abuse-protection";
 import {draftSchema,extractBooking,bookingStatus} from "@/lib/conversation-booking";
 export const dynamic="force-dynamic";
 class Problem extends Error{constructor(public status:number,public code:string){super(code)}}
@@ -38,6 +40,27 @@ async function readPrices() {
  const {results}=await database().prepare("SELECT service,min,max FROM workshop_prices").all<ServicePrice>();
  return results;
 }
+const financialMonth=z.string().regex(/^20\d{2}-(0[1-9]|1[0-2])$/);
+
+type ReceiptGroup = {service:string;count:number;cents:number};
+
+async function readFinancialSummary(month:string) {
+ const start=month+"-01";
+ const end=datePlus(month+"-28",4).slice(0,7)+"-01";
+ const db=database();
+ const [receipts,forecast]=await db.batch([
+  db.prepare("SELECT bookings.service, COUNT(*) AS count, SUM(amount_cents) AS cents FROM workshop_receipts JOIN bookings ON bookings.id=workshop_receipts.booking_id WHERE paid_on>=? AND paid_on<? GROUP BY bookings.service").bind(start,end),
+  db.prepare("SELECT service, status, COUNT(*) AS count FROM bookings WHERE date>=? AND date<? AND status IN ('requested','confirmed') GROUP BY service,status").bind(start,end),
+ ]);
+ const receiptGroups=receipts.results as ReceiptGroup[];
+ return {
+  receiptGroups,
+  receipts:receiptGroups.reduce((total,row)=>({count:total.count+row.count,cents:total.cents+row.cents}),{count:0,cents:0}),
+  forecast:forecast.results as FinancialSummary["forecast"],
+  prices:await readPrices(),
+ };
+}
+
 const planningCapacity=z.number().int().min(1).max(10);
 
 async function planningBooking(id:string) {
@@ -95,15 +118,9 @@ export async function GET(request:Request){return run(async()=>{const url=new UR
  }
  if(action==="adminFinancials"){
   await admin();
-  const month=z.string().regex(/^20\d{2}-(0[1-9]|1[0-2])$/).parse(url.searchParams.get("month"));
-  const start=month+"-01";
-  const end=datePlus(month+"-28",4).slice(0,7)+"-01";
-  const db=database();
-  const [receipts, forecast]=await db.batch([
-    db.prepare("SELECT COUNT(*) AS count, COALESCE(SUM(amount_cents),0) AS cents FROM workshop_receipts WHERE paid_on>=? AND paid_on<?").bind(start,end),
-    db.prepare("SELECT service, status, COUNT(*) AS count FROM bookings WHERE date>=? AND date<? AND status IN ('requested','confirmed') GROUP BY service,status").bind(start,end),
-  ]);
-  return reply({receipts:receipts.results[0],forecast:forecast.results,prices:await readPrices()});
+  const month=financialMonth.parse(url.searchParams.get("month"));
+  const {receipts,forecast,prices}=await readFinancialSummary(month);
+  return reply({receipts,forecast,prices});
  }
  if(action==="availability"){const date=url.searchParams.get("date")||"";if(!/^\d{4}-\d{2}-\d{2}$/.test(date))throw new Problem(400,"INVALID_INPUT");const {results}=await database().prepare("SELECT time FROM bookings WHERE date=? AND status IN ('confirmed','blocked')").bind(date).all<{time:string}>();return reply({times:times.filter(t=>validSlot(date,t)&&!results.some(r=>r.time===t))});}
  if(action==="booking"){await rate(request,"lookup",30);const row=await own(request,url.searchParams.get("id")||"");return reply({booking:{...clean(row),photos:await bookingPhotos(String(row.id))}});}
@@ -117,6 +134,40 @@ export async function POST(request:Request){return run(async()=>{
  const raw=await readChatRequest(request,imageRequest?MAX_CHAT_BODY_BYTES:24000);let b:any;try{b=JSON.parse(raw)}catch{throw new Problem(400,"INVALID_INPUT")}
  if(!b||typeof b!=="object")throw new Problem(400,"INVALID_INPUT");
  if(imageRequest&&b.action!=="chat")throw new Problem(400,"INVALID_INPUT");
+ if(b.action==="adminFinancialAnalysis"){
+  const user=await admin();
+  const {month,lang}=z.object({month:financialMonth,lang:z.enum(["zh","en"])}).parse(b);
+  const summary=await readFinancialSummary(month);
+  if(!summary.receipts.count&&!summary.forecast.length)return reply({analysis:null});
+
+  const key=env.OPENAI_API_KEY||process.env.OPENAI_API_KEY;
+  if(!key)throw new Problem(503,"AI_UNAVAILABLE");
+  if(!await budget(user.userId,"finance-ai",10)||!await paidAIAllowed())
+   throw new Problem(429,"AI_LIMIT");
+
+  // Only aggregate amounts and counts go to the model. Service names come from the catalogue.
+  const snapshot={
+   month,asOfSydney:todaySydney(),currency:"AUD",
+   recordedReceipts:{count:summary.receipts.count,total:summary.receipts.cents/100},
+   receiptsByService:summary.receiptGroups.map(row=>({
+    service:services.find(item=>item.id===row.service)?.[lang]??(lang==="zh"?"其他服务":"Other service"),
+    count:row.count,total:row.cents/100,
+   })),
+   confirmedEstimate:bookingEstimate(summary,"confirmed"),
+   pendingEstimate:bookingEstimate(summary,"requested"),
+   serviceDemand:services.map(item=>({
+    service:item[lang],
+    confirmed:summary.forecast.find(row=>row.service===item.id&&row.status==="confirmed")?.count??0,
+    pending:summary.forecast.find(row=>row.service===item.id&&row.status==="requested")?.count??0,
+   })).filter(row=>row.confirmed||row.pending),
+  };
+  try{
+   return reply({analysis:await analyseFinancials(key,lang,snapshot)});
+  }catch(error){
+   if(error instanceof AIError)throw new Problem(error.code==="AI_BUSY"?429:503,error.code);
+   throw error;
+  }
+ }
  if(b.action==="pageView"){
   const page=z.enum(trackedPages).parse(b.page);
   const day=todaySydney();
@@ -298,12 +349,7 @@ export async function POST(request:Request){return run(async()=>{
   await verifyHuman(request,b.humanToken,"chat");
   if(emailVerificationEnabled()&&(!customer||!customer.emailVerifiedAt))throw new Problem(403,"EMAIL_VERIFICATION_REQUIRED");
   if(!await paidChatAllowed(request,customer?.id))return chatReply(fallback("personal_limit"));
-  const rawLimit=Number(env.AI_DAILY_REQUEST_LIMIT??"50");const limit=Number.isFinite(rawLimit)&&rawLimit>=0?Math.min(Math.floor(rawLimit),1000):50;
-  if(limit===0)return chatReply(fallback("daily_limit"));
-  const window=Math.floor(Date.now()/86400000);
-  const used=await database().prepare("INSERT INTO rate_limits(key,window,hits) VALUES('__ai_daily',?,1) ON CONFLICT(key) DO UPDATE SET hits=CASE WHEN window=excluded.window THEN hits+1 ELSE 1 END,window=excluded.window RETURNING hits").bind(window).first<{hits:number}>();
-  if(!used)throw new Problem(503,"UNAVAILABLE");
-  if(used.hits>limit)return chatReply(fallback("daily_limit"));
+  if(!await paidAIAllowed())return chatReply(fallback("daily_limit"));
   try{return chatReply(await openaiReply(key,d.message,d.lang,history,fetch,images,catalogue));}
   catch(e){console.warn("OpenAI request unavailable",e instanceof AIError?e.code:"AI_UNAVAILABLE");return chatReply(fallback("temporarily_unavailable"));}
  }

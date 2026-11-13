@@ -82,3 +82,8 @@
 .workshop-notice { padding: 12px; margin: 14px 0; border-left: 4px solid #c89021; background: #fff3ce; color: #272419; overflow-wrap: anywhere; }
 .workshop-notice p { white-space: pre-wrap; }
 @media (max-width: 540px) { .workshop-form-grid { grid-template-columns: 1fr; } }
+
+
+.financial-analysis { margin-top: 24px; padding-top: 18px; border-top: 1px solid #d7e2e6; }
+.financial-analysis ul { list-style: disc; padding-inline-start: 1.4rem; }
+.financial-analysis li { margin-bottom: 0.4rem; }

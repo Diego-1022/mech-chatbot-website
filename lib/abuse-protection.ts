@@ -28,3 +28,16 @@ export async function paidChatAllowed(request:Request,customerId?:string){
   if(!await budget(ip,"ai-ip",30))return false;
   return customerId?budget(customerId,"ai-account",20):budget(ip,"ai-guest",5);
 }
+
+// Chat and finance analysis share the configured workshop-wide AI allowance.
+export async function paidAIAllowed() {
+  const rawLimit=Number(env.AI_DAILY_REQUEST_LIMIT??"50");
+  const limit=Number.isFinite(rawLimit)&&rawLimit>=0?Math.min(Math.floor(rawLimit),1000):50;
+  if(!limit)return false;
+  const window=Math.floor(Date.now()/86400000);
+  const row=await database().prepare(
+    "INSERT INTO rate_limits(key,window,hits) VALUES('__ai_daily',?,1) ON CONFLICT(key) DO UPDATE SET hits=CASE WHEN window=excluded.window THEN hits+1 ELSE 1 END,window=excluded.window RETURNING hits",
+  ).bind(window).first<{hits:number}>();
+  if(!row)throw new AccountProblem("UNAVAILABLE",503);
+  return row.hits<=limit;
+}
