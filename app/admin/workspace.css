@@ -81,7 +81,12 @@
 .admin-view { width: 100%; max-width: 1320px; margin-inline: auto; display: grid; align-content: start; gap: 17px; }
 .admin-view-header { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .admin-view-header h1 { margin: 0; font-size: clamp(1.75rem, 4vw, 3.3rem); line-height: 1.13; letter-spacing: -.05em; }
-.admin-view .panel { margin: 0; min-width: 0; }
+.admin-view .panel {
+  margin: 0;
+  min-width: 0;
+  color: var(--ink);
+}
+.admin-view .panel :is(.field input, .field textarea) { color: var(--ink); }
 .admin-backlink { color: var(--admin-yellow); width: fit-content; }
 .admin-profile dl { display: grid; gap: 10px; margin-block: 13px; }
 .admin-profile dl div { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(0, 2fr); gap: 12px; }

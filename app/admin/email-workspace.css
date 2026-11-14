@@ -3,7 +3,6 @@
   --mail-muted: #475966;
   --mail-line: #dce3e7;
   --mail-paper: #fff;
-  color: var(--mail-ink);
   min-width: 0;
 }
 
@@ -25,6 +24,11 @@
   font-size: .875rem;
 }
 
+.email-workspace > .email-help,
+.email-workspace > .email-title-row .email-help {
+  color: #acb9b7;
+}
+
 .email-title-row,.email-toolbar,.email-actions,.email-compose-actions {
   display: flex;
   flex-wrap: wrap;
@@ -44,6 +48,15 @@
   text-decoration: none;
 }
 
+.email-workspace .email-toolbar .secondary {
+  color: inherit;
+  border-color: #87969b;
+}
+
+.email-workspace .email-toolbar .secondary:hover {
+  background: #263338;
+}
+
 .email-workspace button:disabled {
   cursor: not-allowed;
   opacity: .62;
@@ -53,6 +66,7 @@
   border: 1px solid var(--mail-line);
   border-radius: .875rem;
   background: var(--mail-paper);
+  color: var(--mail-ink);
 }
 
 .email-import,.email-compose-frame,.email-original,.email-preview {
