@@ -45,3 +45,9 @@ export const workshopPageViews = sqliteTable("workshop_page_views", {
   page: text("page").notNull(),
   views: integer("views").notNull(),
 }, t=>[uniqueIndex("workshop_page_views_day_page").on(t.day,t.page)]);
+
+export const workshopRosterWeeks = sqliteTable("workshop_roster_weeks", {
+  week: text("week").primaryKey().notNull(),
+  data: text("data").notNull(),
+  revision: integer("revision").notNull(),
+});

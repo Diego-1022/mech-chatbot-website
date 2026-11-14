@@ -1,4 +1,4 @@
-import {canSchedule, schedulingWindow, suggestedSlots, type PlanningBooking} from "@/lib/workshop-scheduling";
+import {canSchedule, isSchedulingCandidate, schedulingWindow, suggestedSlots, type PlanningBooking} from "@/lib/workshop-scheduling";
 import {trackedPages} from "@/lib/workshop-analytics";
 import {env} from "cloudflare:workers";
 import {z} from "zod";
@@ -83,6 +83,23 @@ export async function GET(request:Request){return run(async()=>{const url=new UR
  if(action==="notice"){
   const notice=await database().prepare("SELECT message_en AS en,message_zh AS zh FROM workshop_notice WHERE id=1").first<{en:string;zh:string}>();
   return reply({notice:notice??{en:"",zh:""}});
+ }
+ if(action==="adminScheduleWeek"){
+  await admin();
+  const start=z.string().regex(/^20\d{2}-\d{2}-\d{2}$/).date().parse(url.searchParams.get("start"));
+  const capacity=planningCapacity.parse(Number(url.searchParams.get("capacity")));
+  const db=database();
+  const {results:requests}=await db.prepare(
+   "SELECT id,date,time,service,vehicle,status FROM bookings WHERE date BETWEEN ? AND ? AND status='requested' ORDER BY date,time,created_at,id LIMIT 50"
+  ).bind(start,datePlus(start,6)).all<PlanningBooking & {id:string}>();
+  const first=start<todaySydney()?todaySydney():start;
+  const jobs=await planningJobs("",first,datePlus(first,12));
+  const plans=requests.map(booking=>{
+   const [option]=suggestedSlots(booking,jobs,capacity);
+   if(option)jobs.push({...booking,...option,status:"confirmed"});
+   return {id:booking.id,date:booking.date,time:booking.time,service:booking.service,option:option??null};
+  });
+  return reply({plans});
  }
  if(action==="adminSchedule"){
   await admin();
@@ -283,9 +300,7 @@ export async function POST(request:Request){return run(async()=>{
   const current=await planningBooking(data.id);
   if(current.date!==data.originalDate||current.time!==data.originalTime||current.status!==data.originalStatus)
    throw new Problem(409,"NOT_ACTIVE");
-  const {start,end}=schedulingWindow(current);
-  const options=suggestedSlots(current,await planningJobs(data.id,start,end),data.capacity);
-  if(!options.some(option=>option.date===data.date&&option.time===data.time))
+  if(!isSchedulingCandidate(data,current))
    throw new Problem(409,"SLOT_TAKEN");
   // Compare the day's workload in the same statement that changes the slot.
   // A concurrent booking, closure or completion forces the administrator to recheck.

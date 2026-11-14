@@ -3,6 +3,7 @@
 import {useEffect, useRef, useState, type FormEvent, type MouseEvent} from "react";
 import {api, errorText, statusLabel} from "@/lib/client";
 import {datePlus, services, serviceName, times, todaySydney, validSlot, type Lang} from "@/lib/catalog";
+import {estimateWork} from "@/lib/workshop-scheduling";
 import {extractBooking} from "@/lib/conversation-booking";
 import {bookingDetailsSchema} from "@/lib/booking-input";
 import {workshopContact} from "@/lib/workshop-info";
@@ -10,21 +11,9 @@ import {readWorkshopNotice, type NoticeText} from "@/components/workshop-notice"
 
 export type CalendarEntry = {id:string; date:string; time:string; service:string; status:string};
 
-// Planning defaults for the initial service or inspection, in minutes.
-const serviceWorkMinutes: Partial<Record<string, readonly [number, number]>> = {
-  service: [60, 90],
-  brakes: [30, 60],
-  battery: [30, 45],
-  diagnostic: [45, 90],
-  tyres: [45, 75],
-  aircon: [45, 90],
-};
-
 function workEstimate(service: string, lang: Lang) {
-  const range = Object.hasOwn(serviceWorkMinutes, service) ? serviceWorkMinutes[service] : undefined;
-  if (!range) return null;
-  const [min, max] = range;
-  return lang === "zh" ? `预计工时 ${min}–${max} 分钟` : `Est. work ${min}–${max} min`;
+  const {min,max} = estimateWork(service,"");
+  return lang === "zh" ? "预计工时 "+min+"–"+max+" 分钟" : "Est. work "+min+"–"+max+" min";
 }
 
 export function mondayOf(date: string) {
@@ -70,7 +59,7 @@ export function WorkshopWeek({date, entries, lang, onDate}: {
                   className={`workshop-event workshop-event--${row.status}`} data-service={row.service}>
                   {row.status!=="blocked" && <strong>{serviceName(row.service,lang)}</strong>}
                   <span>{row.status==="requested"
-                    ? (taken ? t("待确认 · 冲突","Requested · clash") : t("待确认","Requested"))
+                    ? (taken || !available ? t("待确认 · ✕ 不可约","Requested · ✕ unavailable") : t("待确认 · ✓ 可约","Requested · ✓ available"))
                     : statusLabel(row.status,lang)}</span>
                   {estimate && <span className="small">{estimate}</span>}
                 </button>;
@@ -140,8 +129,8 @@ function RequestReply({date, time, available, lang}: {
   </div>;
 }
 
-export function WorkshopRequest({date, lang, busy, onCreate}: {
-  date:string; lang:Lang; busy:boolean; onCreate:(payload:Record<string,unknown>)=>Promise<boolean>;
+export function WorkshopRequest({date, lang, busy, onCreate, initialEmail="", openRequest=0}: {
+  date:string; lang:Lang; busy:boolean; initialEmail?:string; openRequest?:number; onCreate:(payload:Record<string,unknown>)=>Promise<boolean>;
 }) {
   const t = (zh:string,en:string) => lang === "zh" ? zh : en;
   const [requestDate, setRequestDate] = useState(date);
@@ -152,6 +141,16 @@ export function WorkshopRequest({date, lang, busy, onCreate}: {
   const [importMessage, setImportMessage] = useState("");
   const [importedTime, setImportedTime] = useState<string | null>(null);
   const requestId = useRef<{id:string; details:string} | null>(null);
+  useEffect(() => {
+    if (!initialEmail) return;
+    setEmailText(initialEmail);
+    setExpanded(true);
+  }, [initialEmail]);
+
+  useEffect(() => {
+    if (openRequest>0) setExpanded(true);
+  }, [openRequest]);
+
   const opening = times.filter(time=>validSlot(requestDate,time));
 
   const selectedTime = importedTime === null ? opening[0] ?? "" : opening.includes(importedTime) ? importedTime : "";
@@ -217,7 +216,7 @@ export function WorkshopRequest({date, lang, busy, onCreate}: {
     }
   }
 
-  return <details className="panel" onToggle={e=>setExpanded(e.currentTarget.open)}>
+  return <details className="panel" open={expanded} onToggle={e=>setExpanded(e.currentTarget.open)}>
     <summary>{t("添加待确认请求","Add requested appointment")}</summary>
     <p className="muted">{t("确认后才占用时段。所有时间均为悉尼当地时间。","A slot is held only after confirmation. All times are Sydney local time.")}</p>
     <form onSubmit={submit}>
@@ -291,7 +290,7 @@ export function WorkshopSettings({lang}: {lang:Lang}) {
   return <section className="panel">
     <h2>{t("店铺设置","Workshop settings")}</h2>
     <p>{workshopContact.phone} · {workshopContact.address}</p>
-    <p className="muted">{t("公告显示在首页预约区。关闭预约时段请使用上方时段管理。","The notice appears beside the home booking form. To close appointment slots, use availability controls above.")}</p>
+    <p className="muted">{t("公告显示在首页预约区。如需关闭时段，请前往预约页面。","The notice appears beside the home booking form. To close check-in slots, use availability controls on Appointments.")}</p>
     {error&&<p className="error" role="alert">{errorText(error,lang)}</p>}
     {saved&&<p className="notice" role="status">{t("营业公告已更新。","Workshop notice updated.")}</p>}
     {notice&&<form onSubmit={save}>

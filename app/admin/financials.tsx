@@ -3,6 +3,7 @@
 import {useEffect, useState, type FormEvent} from "react";
 import {api,errorText} from "@/lib/client";
 import {todaySydney,type Lang} from "@/lib/catalog";
+import {EmailEstimates} from "./email-estimates";
 import {bookingEstimate,type FinancialAnalysis,type FinancialSummary} from "@/lib/workshop-financials";
 
 function MonthlyAnalysis({lang,month,hasData}: {lang:Lang;month:string;hasData:boolean}) {
@@ -94,6 +95,7 @@ export function WorkshopFinancials({lang, revision}: {lang:Lang; revision:number
       <dd>{range("requested")}</dd>
     </dl>}
     <p className="small muted">{t("估算使用服务目录的价格区间。已登记收款来自管理员录入的实际到账金额。","Estimates use the service catalogue’s price ranges. Recorded receipts come from payments entered by an administrator.")}</p>
+    {summary && <EmailEstimates month={month} lang={lang} prices={summary.prices}/>}
     {summary && <MonthlyAnalysis key={month+":"+revision+":"+lang} lang={lang} month={month}
       hasData={summary.receipts.count>0||summary.forecast.length>0}/>}
   </section>;
