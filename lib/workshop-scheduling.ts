@@ -45,13 +45,19 @@ export function schedulingWindow(booking:Slot) {
   return {start,end:datePlus(start,6)};
 }
 
+export function isSchedulingCandidate(slot:Slot,booking:PlanningBooking) {
+  const {start,end}=schedulingWindow(booking);
+  if (slot.date<start || slot.date>end) return false;
+  if (slot.date!==booking.date) return true;
+  return slot.time>booking.time || (slot.time===booking.time && booking.status==="requested");
+}
+
 export function suggestedSlots(booking:PlanningBooking, others:PlanningBooking[], capacity:number) {
   const {start}=schedulingWindow(booking);
   return Array.from({length:7},(_,index)=>datePlus(start,index)).flatMap(date=>
     times.map(time=>({date,time}))
   ).filter(slot=>
-    (slot.date>booking.date || (slot.date===booking.date && slot.time>=booking.time)) &&
-    (booking.status==="requested" || slot.date!==booking.date || slot.time!==booking.time) &&
+    isSchedulingCandidate(slot,booking) &&
     canSchedule(slot,booking,others,capacity)
   ).slice(0,3);
 }
