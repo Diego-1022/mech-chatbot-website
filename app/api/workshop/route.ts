@@ -4,7 +4,7 @@ import {env} from "cloudflare:workers";
 import {z} from "zod";
 import {database} from "@/db";
 import {getChatGPTUser} from "@/app/chatgpt-auth";
-import {services,times,validSlot,todaySydney,datePlus,withServicePrices,type ServicePrice} from "@/lib/catalog";
+import {services,times,validSlot,todaySydney,datePlus,withServicePrices,type Lang,type ServicePrice} from "@/lib/catalog";
 import {assistantReply} from "@/lib/assistant";
 import {openaiReply,AIError} from "@/lib/openai-assistant";
 import {analyseFinancials} from "@/lib/openai-financials";
@@ -13,11 +13,13 @@ import {validateChatImages,readChatRequest,MAX_CHAT_BODY_BYTES,ChatImageError} f
 import {quickReply} from "@/lib/faq";
 import {bookingDetailsSchema,hasNonEnglishBookingText} from "@/lib/booking-input";
 import {currentCustomer,digest,recordChat,AccountProblem} from "@/lib/customer-session";
-import {verifyHuman,paidChatAllowed,emailVerificationEnabled,budget,paidAIAllowed} from "@/lib/abuse-protection";
+import {verifyChatHuman,paidChatAllowed,emailVerificationEnabled,budget,paidAIAllowed} from "@/lib/abuse-protection";
 import {draftSchema,extractBooking,bookingStatus} from "@/lib/conversation-booking";
 export const dynamic="force-dynamic";
 class Problem extends Error{constructor(public status:number,public code:string){super(code)}}
-const reply=(data:unknown,status=200)=>Response.json(data,{status,headers:{"Cache-Control":"no-store","Referrer-Policy":"no-referrer"}});
+const reply=(data:unknown,status=200,cookie?:string)=>Response.json(data,{
+ status,headers:{"Cache-Control":"no-store","Referrer-Policy":"no-referrer",...(cookie?{"Set-Cookie":cookie}:{})},
+});
 const service=z.enum(services.map(s=>s.id) as [string,...string[]]);
 const slot=z.object({date:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),time:z.enum(times as [string,...string[]])});
 const fields=bookingDetailsSchema.extend({service});
@@ -39,6 +41,38 @@ async function run(fn:()=>Promise<Response>){try{return await fn()}catch(e){if(e
 async function readPrices() {
  const {results}=await database().prepare("SELECT service,min,max FROM workshop_prices").all<ServicePrice>();
  return results;
+}
+
+async function availableOn(date:string) {
+ const candidateTimes=times.filter(time=>validSlot(date,time));
+ if(!candidateTimes.length)return [];
+ const {results}=await database().prepare("SELECT time FROM bookings WHERE date=? AND status IN ('confirmed','blocked')")
+  .bind(date).all<{time:string}>();
+ return candidateTimes.filter(time=>!results.some(row=>row.time===time));
+}
+
+async function nextAvailableSlots(start:string,today:string,limit:number) {
+ const end=datePlus(today,60);
+ if(start>end)return [];
+ const {results}=await database().prepare(
+  "SELECT date,time FROM bookings WHERE date BETWEEN ? AND ? AND status IN ('confirmed','blocked')",
+ ).bind(start,end).all<{date:string;time:string}>();
+ const taken=new Set(results.map(({date,time})=>date+" "+time));
+ const available:{date:string;time:string}[]=[];
+ for(let date=start;date<=end;date=datePlus(date,1)){
+  for(const time of times){
+   if(taken.has(date+" "+time)||!validSlot(date,time))continue;
+   available.push({date,time});
+   if(available.length===limit)return available;
+  }
+ }
+ return available;
+}
+
+function bookingDay(date:string,lang:Lang){
+ return new Intl.DateTimeFormat(lang==="zh"?"zh-CN":"en-AU",{
+  weekday:"long",month:"short",day:"numeric",timeZone:"Australia/Sydney",
+ }).format(new Date(date+"T00:00:00Z"));
 }
 const financialMonth=z.string().regex(/^20\d{2}-(0[1-9]|1[0-2])$/);
 
@@ -139,7 +173,7 @@ export async function GET(request:Request){return run(async()=>{const url=new UR
   const {receipts,forecast,prices}=await readFinancialSummary(month);
   return reply({receipts,forecast,prices});
  }
- if(action==="availability"){const date=url.searchParams.get("date")||"";if(!/^\d{4}-\d{2}-\d{2}$/.test(date))throw new Problem(400,"INVALID_INPUT");const {results}=await database().prepare("SELECT time FROM bookings WHERE date=? AND status IN ('confirmed','blocked')").bind(date).all<{time:string}>();return reply({times:times.filter(t=>validSlot(date,t)&&!results.some(r=>r.time===t))});}
+ if(action==="availability"){const date=url.searchParams.get("date")||"";if(!/^\d{4}-\d{2}-\d{2}$/.test(date))throw new Problem(400,"INVALID_INPUT");return reply({times:await availableOn(date)});}
  if(action==="booking"){await rate(request,"lookup",30);const row=await own(request,url.searchParams.get("id")||"");return reply({booking:{...clean(row),photos:await bookingPhotos(String(row.id))}});}
  if(action==="admin"){await admin();const date=url.searchParams.get("date")||todaySydney();if(!/^\d{4}-\d{2}-\d{2}$/.test(date))throw new Problem(400,"INVALID_INPUT");const {results}=await database().prepare("SELECT bookings.id,name,email,phone,vehicle,service,date,time,notes,status,created_at,paid_on,amount_cents FROM bookings LEFT JOIN workshop_receipts ON bookings.id=workshop_receipts.booking_id WHERE date=? ORDER BY time").bind(date).all();return reply({bookings:await Promise.all(results.map(async row=>({...row,photos:await bookingPhotos(String(row.id))})))});}
  return reply({mode:(env.OPENAI_API_KEY||process.env.OPENAI_API_KEY)?"ai":"rules",timezone:"Australia/Sydney"});});}
@@ -199,16 +233,49 @@ export async function POST(request:Request){return run(async()=>{
   if(b.customerId!==(customer?.id||null))throw new Problem(409,"SESSION_CHANGED");
   const data=z.object({message:z.string().trim().min(1).max(1500),lang:z.enum(["en","zh"]),draft:draftSchema.default({})}).parse(b);
   if(/smoke|fire|fuel leak|brake failure|overheat|冒烟|着火|失灵|过热|燃油泄漏/i.test(data.message))return reply({...assistantReply(data.message,data.lang),bookingDraft:data.draft,bookingReady:false,mode:"guide"});
-  const {draft}=extractBooking(data.message,data.draft);
+  const today=todaySydney(), zh=data.lang==="zh";
+  const {draft,dateSpecified,timeSpecified,earliestRequested,unclearDate,unclearTime}=extractBooking(data.message,data.draft,today);
   if(customer){draft.name ||= customer.name;draft.email ||= customer.email;}
-  let available:string[]=[];
-  if(draft.date&&/^\d{4}-\d{2}-\d{2}$/.test(draft.date)){
-    const {results}=await database().prepare("SELECT time FROM bookings WHERE date=? AND status IN ('confirmed','blocked')").bind(draft.date).all<{time:string}>();
-    available=times.filter(t=>validSlot(draft.date!,t)&&!results.some(r=>r.time===t));
+  let available=draft.date?await availableOn(draft.date):[];
+  let intro="";
+  if(earliestRequested&&!timeSpecified&&!unclearDate&&!unclearTime){
+   const suggested=dateSpecified
+    ? draft.date&&available.length?{date:draft.date,time:available[0]}:undefined
+    : (await nextAvailableSlots(today,today,1))[0];
+   if(suggested){
+    draft.date=suggested.date;
+    draft.time=suggested.time;
+    available=await availableOn(suggested.date);
+    if(available.includes(suggested.time)){
+     const when=bookingDay(suggested.date,data.lang)+" "+suggested.time;
+     intro=zh?`最早可在 ${when} 到店（悉尼时间）。`:`The earliest check-in I found is ${when} (Sydney time). `;
+    }
+   }else if(!dateSpecified){
+    delete draft.date;
+    delete draft.time;
+    available=[];
+    intro=zh?"未来 60 天内暂未找到可用的到店时段。":"I couldn’t find an open check-in slot in the next 60 days. ";
+   }
   }
-  const status=bookingStatus(draft,available,data.lang);
+  if(!intro&&(dateSpecified||timeSpecified)&&draft.date&&draft.time&&available.includes(draft.time)){
+   const when=bookingDay(draft.date,data.lang)+" "+draft.time;
+   intro=zh?`已把 ${when}（悉尼时间）填入预约草稿。`:`I’ve entered ${when} (Sydney time) in your booking draft. `;
+  }
+  const status=bookingStatus(draft,available,data.lang,today);
+  let alternative="";
+  if(draft.date&&!available.length){
+   const start=z.string().date().safeParse(draft.date).success&&draft.date>=today
+    ? datePlus(draft.date,1):today;
+   const slots=await nextAvailableSlots(start,today,2);
+   if(slots.length){
+    const list=slots.map(({date,time})=>bookingDay(date,data.lang)+" "+time).join(zh?"、":" or ");
+    alternative=zh?` 最近的可用时段是 ${list}（悉尼时间）。请告诉我你选的日期和时间。`:` The next available options are ${list} (Sydney time). Which day and time suit you?`;
+   }else{
+    alternative=zh?" 请试试其他日期。":" Try another date.";
+   }
+  }
   draft.awaiting=status.ready?undefined:status.awaiting;
-  return reply({reply:status.reply,bookingDraft:draft,bookingReady:status.ready,available,service:draft.service,mode:"guide"});
+  return reply({reply:intro+status.reply+alternative,bookingDraft:draft,bookingReady:status.ready,available,service:draft.service,mode:"guide"});
  }
  if(b.action==="create"){if(hasNonEnglishBookingText(b))throw new Problem(400,"ENGLISH_ONLY");await rate(request,"create",12);const d=fields.merge(slot).extend({requestId:z.string().uuid(),token:secret}).parse(b);valid(d.date,d.time);const tokenHash=await hash(d.token);const existing=await database().prepare("SELECT * FROM bookings WHERE id=?").bind(d.requestId).first<Record<string,any>>();if(existing){if(existing.token_hash!==tokenHash)throw new Problem(409,"INVALID_INPUT");return reply({booking:{...clean(existing),photos:await bookingPhotos(String(existing.id))}});}
  const customer=await currentCustomer(request);
@@ -346,10 +413,11 @@ export async function POST(request:Request){return run(async()=>{
   if(history.reduce((n,h)=>n+h.content.length,0)>16000)throw new Problem(400,"INVALID_INPUT");
   const customer=await currentCustomer(request);
   if(Object.prototype.hasOwnProperty.call(b,"customerId")&&b.customerId!==(customer?.id||null))throw new Problem(409,"SESSION_CHANGED");
+  let chatPassCookie:string|undefined;
   async function chatReply(result:Record<string,unknown>){
    let saved=false;
    if(customer){try{await recordChat(customer,d.message,result,images.length);saved=true}catch{console.warn("Chat history save unavailable")}}
-   return reply({...result,historySaved:saved,signedIn:!!customer});
+   return reply({...result,historySaved:saved,signedIn:!!customer},200,chatPassCookie);
   }
   const catalogue=withServicePrices(await readPrices());
   const customerHistory=history.filter(h=>h.role==="user").map(h=>h.content);
@@ -361,8 +429,8 @@ export async function POST(request:Request){return run(async()=>{
    service:null,estimate:null,book:false,mode:"rules",reason,imageAnalysis:"unavailable"
   }:{...assistantReply(d.message,d.lang,customerHistory,catalogue),mode:"rules",reason};
   if(!key)return chatReply(fallback("not_configured"));
-  await verifyHuman(request,b.humanToken,"chat");
   if(emailVerificationEnabled()&&(!customer||!customer.emailVerifiedAt))throw new Problem(403,"EMAIL_VERIFICATION_REQUIRED");
+  chatPassCookie=await verifyChatHuman(request,b.humanToken,customer?.id);
   if(!await paidChatAllowed(request,customer?.id))return chatReply(fallback("personal_limit"));
   if(!await paidAIAllowed())return chatReply(fallback("daily_limit"));
   try{return chatReply(await openaiReply(key,d.message,d.lang,history,fetch,images,catalogue));}

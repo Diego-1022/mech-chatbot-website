@@ -15,6 +15,43 @@ export async function verifyHuman(request:Request,token:unknown,action:string){
   }catch{throw new AccountProblem("PROTECTION_UNAVAILABLE",503)}
   if(!result.success||result.hostname!==new URL(request.url).hostname||result.action!==action)throw new AccountProblem("HUMAN_REQUIRED",403);
 }
+
+const CHAT_COOKIE="harbour_chat_verified";
+const CHAT_VERIFICATION_SECONDS=20*60;
+const encoder=new TextEncoder();
+
+export async function verifyChatHuman(request:Request,token:unknown,customerId?:string):Promise<string|undefined> {
+  if(env.TURNSTILE_REQUIRED!=="true")return;
+  const secret=env.TURNSTILE_SECRET_KEY;
+  const siteKey=env.TURNSTILE_SITE_KEY;
+  if(!secret||!siteKey)throw new AccountProblem("PROTECTION_UNAVAILABLE",503);
+
+  const url=new URL(request.url);
+  const ip=request.headers.get("cf-connecting-ip");
+  const signingKey=await crypto.subtle.importKey("raw",encoder.encode(secret),{name:"HMAC",hash:"SHA-256"},false,["sign","verify"]);
+  // Only expiry and its signature are sent to the browser. The scope and identity are reconstructed on every request.
+  const claims=(expiry:number)=>encoder.encode(JSON.stringify([
+    "harbour-chat-verification-v1",siteKey,url.hostname,ip,customerId??null,expiry,
+  ]));
+  const cookie=request.headers.get("cookie")?.split(";").map(value=>value.trim())
+    .find(value=>value.startsWith(CHAT_COOKIE+"="))?.slice(CHAT_COOKIE.length+1);
+  const previous=/^(\d{1,12})\.([a-f0-9]{64})$/.exec(cookie??"");
+  const now=Math.floor(Date.now()/1000);
+  if(previous){
+    const expiry=Number(previous[1]);
+    if(expiry>now&&expiry<=now+CHAT_VERIFICATION_SECONDS){
+      const signature=Uint8Array.from(previous[2].match(/../g)!,part=>Number.parseInt(part,16));
+      if(await crypto.subtle.verify("HMAC",signingKey,signature,claims(expiry)))return;
+    }
+  }
+
+  await verifyHuman(request,token,"chat");
+  const expiry=Math.floor(Date.now()/1000)+CHAT_VERIFICATION_SECONDS;
+  const signature=await crypto.subtle.sign("HMAC",signingKey,claims(expiry));
+  const signed=Array.from(new Uint8Array(signature),part=>part.toString(16).padStart(2,"0")).join("");
+  return `${CHAT_COOKIE}=${expiry}.${signed}; Path=/api/workshop; HttpOnly; SameSite=Strict; Max-Age=${CHAT_VERIFICATION_SECONDS}${url.protocol==="https:"?"; Secure":""}`;
+}
+
 // Each key has one atomic counter: concurrent requests and changing accounts do not reset it.
 export async function budget(subject:string,kind:string,maximum:number,period=86400000){
   const key=await digest(`protection:${kind}:${subject}`),window=Math.floor(Date.now()/period);
