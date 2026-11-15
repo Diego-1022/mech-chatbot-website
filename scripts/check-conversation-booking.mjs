@@ -19,7 +19,7 @@ let d=extractBooking('name: Alex Smith; email: alex@example.com; phone: 04123456
 check('Labelled details collected',d.name==='Alex Smith'&&d.vehicle==='2016 Toyota Corolla'&&d.phone==='0412345678');
 check('Corrections retain unrelated fields',extractBooking('vehicle: 2017 Toyota Corolla',d,today).draft.email===d.email);
 check('Explicit vehicle correction applied',extractBooking('vehicle: 2017 Toyota Corolla',d,today).draft.vehicle==='2017 Toyota Corolla');
-const {nextBookingDate}=await import('../lib/catalog.ts');d.date=nextBookingDate();
+const {nextBookingDate,todaySydney}=await import('../lib/catalog.ts');d.date=nextBookingDate();
 check('Ready only with all details and real availability',bookingStatus(d,['10:00'],'en').ready);
 const chineseNotes = extractBooking('备注：刹车有声音', d, today).draft;
 check('Chinese notes retained and ready for review',chineseNotes.notes==='刹车有声音'&&bookingStatus(chineseNotes,['10:00'],'zh').ready);
@@ -48,12 +48,94 @@ check('ASAP repair phrase enters the booking flow',bookingIntent('i want to fix 
 check('ASAP does not count inherited date and time as user constraints',(()=>{const result=extractBooking('i want to fix it asap',{...existing,awaiting:'name'},screenshotDay);return result.earliestRequested&&!result.dateSpecified&&!result.timeSpecified&&result.draft.name===existing.name;})());
 check('ASAP can be constrained to an explicit date',(()=>{const result=extractBooking('earliest available tmr',existing,screenshotDay);return result.earliestRequested&&result.dateSpecified&&result.draft.date==='2026-11-16';})());
 check('Chinese ASAP wording is recognised',wantsEarliestBooking('我想尽快预约'));
+
+const chosenSlot={date:nextBookingDate(),time:'10:00',service:'brakes'};
+const testName='Alex Smith';
+const testVehicle='2020 Toyota Corolla';
+const testEmail='alex@example.test';
+const testPhone='0491 570 006';
+const slashDetails=testName+' / '+testVehicle+' / '+testPhone;
+const combinedIntake=extractBooking(slashDetails,{...chosenSlot,awaiting:'vehicle'},today);
+const {draft:combined}=combinedIntake;
+check('Three slash-delimited details are captured without labels',
+ combined.name===testName&&combined.vehicle===testVehicle&&combined.phone===testPhone);
+check('Combined details preserve chosen date, time and service',
+ combined.date===chosenSlot.date&&combined.time===chosenSlot.time&&combined.service===chosenSlot.service);
+for(const lang of ['en','zh']){
+ const status=bookingStatus(combined,['10:00'],lang,todaySydney(),combinedIntake);
+ check('Only the missing email is requested with a safe example in '+lang,
+  status.awaiting==='email'&&status.reply.includes(testEmail)&&!status.reply.includes(testPhone)&&!status.reply.includes(testVehicle));
+}
+const chineseCombined=extractBooking(
+ '姓名：'+testName+' ／ 车辆：'+testVehicle+' ／ 电话：'+testPhone,
+ {...chosenSlot,awaiting:'vehicle'},today,
+).draft;
+check('Chinese labels and full-width separators accept valid booking details',
+ chineseCombined.name===testName&&chineseCombined.vehicle===testVehicle&&chineseCombined.phone===testPhone);
+const nameAndVehicle=extractBooking(testName+'/'+testVehicle,{...chosenSlot,awaiting:'vehicle'},today).draft;
+check('No-space name and vehicle are parsed as two details',
+ nameAndVehicle.name===testName&&nameAndVehicle.vehicle===testVehicle&&nameAndVehicle.phone===undefined);
+const nameAndPhone=extractBooking(testName+'/0491570006',{...chosenSlot,awaiting:'name'},today).draft;
+check('No-space name and phone are parsed as two details',
+ nameAndPhone.name===testName&&nameAndPhone.phone==='0491570006'&&nameAndPhone.vehicle===undefined);
+const mixedLabels=extractBooking(testName+' / phone: '+testPhone,{awaiting:'name'},today).draft;
+check('A plain name and labelled phone work in a single reply',mixedLabels.name===testName&&mixedLabels.phone===testPhone);
+const compactDetails=extractBooking(testName+testVehicle,{...chosenSlot,awaiting:'vehicle'},today).draft;
+check('A run-together name and year-first vehicle are recognised',
+ compactDetails.name===testName&&compactDetails.vehicle===testVehicle);
+const exactDateDetails=extractBooking('2026-11-10 at 10am / '+slashDetails,{service:'brakes'},today).draft;
+check('An exact booking date and time remain parseable with slash-delimited details',
+ exactDateDetails.date==='2026-11-10'&&exactDateDetails.time==='10:00'&&exactDateDetails.name===testName&&exactDateDetails.phone===testPhone);
+const relativeDateDetails=extractBooking('明天上午十点 / '+slashDetails,{service:'brakes'},today).draft;
+check('A relative booking date and time remain parseable with slash-delimited details',
+ relativeDateDetails.date==='2026-11-07'&&relativeDateDetails.time==='10:00'&&relativeDateDetails.name===testName&&relativeDateDetails.vehicle===testVehicle);
+const weekdayDetails=extractBooking('Monday / '+slashDetails,{},today).draft;
+check('A weekday attached to personal details is parsed as a date',
+ weekdayDetails.date==='2026-11-09'&&weekdayDetails.name===testName&&weekdayDetails.vehicle===testVehicle);
+check('A slash between numeric date parts is still treated as ambiguous',
+ extractBooking('11/12 at 10am / '+slashDetails,{},today).unclearDate);
+const invalidPhone=extractBooking(testName+' / '+testVehicle+' / phone: 123',{...chosenSlot,email:testEmail,awaiting:'phone'},today).draft;
+check('Invalid phone keeps valid fields and asks for a phone',
+ invalidPhone.name===testName&&invalidPhone.vehicle===testVehicle&&invalidPhone.email===testEmail&&bookingStatus(invalidPhone,['10:00'],'en').awaiting==='phone');
+const shortPhone=extractBooking(testName+'/'+testVehicle+'/123',{...chosenSlot,email:testEmail,awaiting:'name'},today);
+check('Too-short phone in a combined reply is reported and other fields stay valid',
+ shortPhone.invalidFields.includes('phone')&&shortPhone.draft.name===testName&&shortPhone.draft.vehicle===testVehicle);
+const invalidEmail=extractBooking(testName+' / '+testVehicle+' / 邮箱：alex@',{...chosenSlot,phone:testPhone,awaiting:'email'},today).draft;
+check('Invalid email keeps valid fields and asks for an email',
+ invalidEmail.name===testName&&invalidEmail.vehicle===testVehicle&&invalidEmail.phone===testPhone&&bookingStatus(invalidEmail,['10:00'],'zh').awaiting==='email');
+const complete=extractBooking(testEmail,{...combined,awaiting:'email'},today).draft;
+check('A plain email finishes the otherwise complete slash-delimited booking',
+ complete.email===testEmail&&bookingStatus(complete,['10:00'],'en').ready);
+const corrections=extractBooking('phone: 123 / email: alex@',complete,today);
+check('Invalid contact corrections do not overwrite earlier valid contacts',
+ corrections.invalidFields.includes('email')&&corrections.invalidFields.includes('phone')&&
+ corrections.draft.email===testEmail&&corrections.draft.phone===testPhone);
+const badEmail=extractBooking('邮箱：alex@',complete,today);
+const badEmailStatus=bookingStatus(badEmail.draft,['10:00'],'zh',todaySydney(),badEmail);
+check('A rejected email correction still prompts for a valid email in Chinese',
+ !badEmailStatus.ready&&badEmailStatus.awaiting==='email'&&badEmailStatus.reply.includes('邮箱格式')&&badEmailStatus.reply.includes(testEmail));
+const badPhone=extractBooking('phone: 123',complete,today);
+const badPhoneStatus=bookingStatus(badPhone.draft,['10:00'],'en',todaySydney(),badPhone);
+check('A rejected phone correction still prompts for a valid phone in English',
+ !badPhoneStatus.ready&&badPhoneStatus.awaiting==='phone'&&badPhoneStatus.reply.includes('format of your phone number')&&badPhoneStatus.reply.includes(testPhone));
+check('English notes preserve a slash within the note',
+ extractBooking('notes: Intermittent / after rain',complete,today).draft.notes==='Intermittent / after rain');
+const notesAndPhone=extractBooking('备注：低速时 / 下雨后 / 电话：'+testPhone,combined,today).draft;
+check('Chinese note preserves the slash and accepts a subsequent labelled contact',
+ notesAndPhone.notes==='低速时 / 下雨后'&&notesAndPhone.phone===testPhone&&notesAndPhone.name===testName);
+check('Slash in a vehicle modifier is preserved',
+ extractBooking(testVehicle+' 4WD/AWD',{awaiting:'vehicle'},today).draft.vehicle===testVehicle+' 4WD/AWD');
+check('An unrelated pricing question is not used as a name',
+ !extractBooking('Can you tell me the price?',{awaiting:'name'},today).draft.name);
+check('Unaffected plain vehicle and phone answers still work',
+ extractBooking(testVehicle,{awaiting:'vehicle'},today).draft.vehicle===testVehicle&&
+ extractBooking(testPhone,{awaiting:'phone'},today).draft.phone===testPhone);
 console.log(`${n} conversation extraction checks passed.`);
 
 if(process.argv[2]){
  const root=new URL(process.argv[2]);assert.ok(['127.0.0.1','localhost'].includes(root.hostname));
  const post=async(action,data={})=>{const response=await fetch(root.origin+'/api/workshop',{method:'POST',headers:{Origin:root.origin,'Content-Type':'application/json'},body:JSON.stringify({action,...data})});return {status:response.status,data:await response.json()}};
- const {todaySydney,datePlus}=await import('../lib/catalog.ts');let date=datePlus(todaySydney(),1),time;
+ const {datePlus}=await import('../lib/catalog.ts');let date=datePlus(todaySydney(),1),time;
  const now=todaySydney();
  const initial=await post('prepareBooking',{message:'can we do today',draft:{service:'brakes',vehicle:'2020 Toyota Corolla'},lang:'en',customerId:null});
  check('Conversational today selects the Sydney date',initial.status===200&&initial.data.bookingDraft.date===now);
@@ -67,6 +149,10 @@ if(process.argv[2]){
  for(let i=0;i<7;i++){const result=await fetch(root.origin+'/api/workshop?action=availability&date='+date).then(r=>r.json());if(result.times.length){time=result.times[0];break}date=datePlus(date,1)}
  assert.ok(time);d={...d,date,time};
  let r=await post('prepareBooking',{message:`Book brakes ${date} at ${time}`,draft:{},lang:'en',customerId:null});check('API checks availability and asks missing info',r.status===200&&!r.data.bookingReady&&r.data.available.includes(time));
+ const partial=await post('prepareBooking',{message:slashDetails,draft:r.data.bookingDraft,lang:'en',customerId:null});
+ check('API accepts combined details and asks only for email',partial.status===200&&partial.data.bookingDraft.awaiting==='email'&&partial.data.bookingDraft.name===testName&&partial.data.bookingDraft.vehicle===testVehicle&&partial.data.bookingDraft.phone===testPhone&&partial.data.bookingDraft.date===date&&partial.data.bookingDraft.time===time&&partial.data.reply.includes(testEmail));
+ const filled=await post('prepareBooking',{message:testEmail,draft:partial.data.bookingDraft,lang:'zh',customerId:null});
+ check('API plain email completes the combined-detail booking',filled.status===200&&filled.data.bookingReady&&filled.data.bookingDraft.email===testEmail);
  r=await post('prepareBooking',{message:'Please review',draft:d,lang:'en',customerId:null});check('Complete draft reaches confirmation',r.status===200&&r.data.bookingReady);
  const identity={requestId:crypto.randomUUID(),token:'a'.repeat(64)};
  r=await post('create',{...d,...identity,expectedCustomerId:'another-account'});check('Session switch blocks save',r.status===409);

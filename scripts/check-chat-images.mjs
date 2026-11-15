@@ -3,6 +3,8 @@ import {build} from 'esbuild';
 async function moduleAt(path){const result=await build({entryPoints:[path],bundle:true,platform:'node',format:'esm',write:false,logLevel:'silent'});return import('data:text/javascript;base64,'+Buffer.from(result.outputFiles[0].text).toString('base64'));}
 const {validateChatImages,jpegDimensions,readChatRequest,MAX_CHAT_BODY_BYTES,MAX_CHAT_IMAGE_BYTES}=await moduleAt('lib/chat-images.ts');
 const {openaiReply,MODEL}=await moduleAt('lib/openai-assistant.ts');
+const {assistantReply}=await moduleAt('lib/assistant.ts');
+const {quickReply}=await moduleAt('lib/faq.ts');
 let checks=0;
 function check(name,ok){assert.ok(ok,name);checks++;console.log('PASS '+name)}
 async function rejects(name,fn,code){let error;try{await fn()}catch(e){error=e}check(name,!!error&&(!code||error.code===code))}
@@ -50,6 +52,22 @@ await rejects('Provider failure classified',()=>openaiReply('test-not-a-key','ph
 result=await openaiReply('test-not-a-key','brake noise','en',[],mock({reply:'Arrange an inspection.',service:'brakes',book:false}));
 check('Text-only contract retained',typeof sent.input[0].content==='string'&&!('imageAnalysis' in result)&&result.estimate.max===650);
 
+const slowingNoise='I think my tyre is making a noise, it sounds like scraping when I slow down. Do I need new tyres?';
+const guide=quickReply(slowingNoise,'en');
+check('Deceleration scraping takes priority over a guessed tyre replacement',guide.service==='brakes'&&guide.mode==='guide'&&guide.estimate.service==='brakes'&&guide.estimate.max===650);
+check('Brake guide asks one short timing question',guide.reply.includes('press the brake pedal')&&guide.reply.includes('coasting')&&guide.reply.split('?').length===2);
+check('Brake guide avoids a replacement diagnosis and retains urgent advice',guide.reply.includes('doesn’t tell us whether you need new tyres')&&guide.reply.includes('stop safely'));
+check('Basic fallback uses the same symptom-first priority',assistantReply(slowingNoise,'en').service==='brakes');
+check('Chinese deceleration scraping takes priority over a guessed tyre replacement',quickReply('我以为是轮胎的问题。减速就有摩擦声，要换轮胎吗？','zh')?.service==='brakes');
+check('Confirmed pedal timing retains brake guidance without asking again',quickReply('It only happens when I press the pedal.','en',[slowingNoise])?.service==='brakes'&&!quickReply('It only happens when I press the pedal.','en',[slowingNoise]).reply.includes('?'));
+check('Coasting-only follow-up changes guidance to general diagnostics',quickReply('Only coasting.','en',[slowingNoise])?.service==='diagnostic');
+check('Ambiguous wheel noise goes to diagnostics before replacement',quickReply('The tyre makes a strange noise. Do I need new tyres?','en')?.service==='diagnostic');
+check('Actual tyre wear or pressure loss still goes to tyre inspection',quickReply('My tyre tread is worn and one tyre keeps losing pressure.','en')?.service==='tyres');
+check('A brake failure overrides noise triage, with no sales suggestion',quickReply('My brakes failed and there was scraping when I slowed down.','en')?.service===null&&quickReply('My brakes failed and there was scraping when I slowed down.','en').reply.includes('do not continue driving'));
+check('A tyre sidewall bulge is urgent without an estimate',quickReply('There is a bulge in my tyre sidewall.','en')?.estimate===null);
+check('A straightforward FAQ keeps its guide path',quickReply('Opening hours','en')?.reason==='faq'&&quickReply('Service prices','en')?.service==='service');
+check('OpenAI instructions prioritize symptom timing, distinct tyre evidence and uncertainty',sent.instructions.includes('observed symptoms')&&sent.instructions.includes('brake pedal')&&sent.instructions.includes('coasting')&&sent.instructions.includes('pressure loss'));
+
 if(process.argv[2]){
  const origin=new URL(process.argv[2]);assert.ok(['localhost','127.0.0.1'].includes(origin.hostname),'Local integration only');
  let ip=20;
@@ -63,6 +81,7 @@ if(process.argv[2]){
  p=await post(body);check('Offline image request bypasses FAQ and reports failure',p.r.ok&&p.b.imageAnalysis==='unavailable'&&p.b.estimate===null&&p.b.reply.includes('have not been analysed'));
  p=await post({...body,lang:'zh'});check('Chinese image fallback is explicit',p.r.ok&&p.b.reply.includes('没有分析'));
  p=await post({...body,images:[]});check('Text FAQ remains operational',p.r.ok&&p.b.mode==='guide');
+ p=await post({...body,message:slowingNoise,images:[]});check('Text triage returns the correct service without model connectivity',p.r.ok&&p.b.mode==='guide'&&p.b.service==='brakes');
  const signup=await fetch(origin.origin+'/api/account',{method:'POST',headers:{Origin:origin.origin,'Content-Type':'application/json'},body:JSON.stringify({action:'signup',name:'Image Test',email:`image-${crypto.randomUUID()}@example.invalid`,password:crypto.randomUUID()+crypto.randomUUID()})});
  const user=await signup.json(),cookie=signup.headers.get('set-cookie')?.split(';')[0];check('Local history fixture created',signup.ok&&cookie);
  p=await post({...body,customerId:user.user.id},{Cookie:cookie});check('Image analysis outcome saved for owner',p.r.ok&&p.b.historySaved);
@@ -72,4 +91,4 @@ if(process.argv[2]){
  check('Image bytes excluded from D1 history',!JSON.stringify(account.history).includes('data:image'));
  const guest=await fetch(origin.origin+'/api/account').then(r=>r.json());check('Guest cannot access image conversation',guest.history.length===0);
 }
-console.log(`Passed ${checks} chat image checks. No real API calls made.`);
+console.log(`Passed ${checks} chat image and triage checks. No real API calls made.`);
