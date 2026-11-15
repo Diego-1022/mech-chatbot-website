@@ -1,10 +1,11 @@
 import {z} from 'zod';
 import {datePlus,todaySydney,services,validSlot,type Lang} from './catalog';
-import {bookingDetailsSchema} from './booking-input';
+import {bookingDetailsSchema,type BookingField} from './booking-input';
 export const draftSchema=z.object({awaiting:z.enum(['date','time','service','vehicle','name','email','phone','notes']).optional(),service:z.enum(services.map(s=>s.id) as [string,...string[]]).optional(),date:z.string().max(10).optional(),time:z.string().max(5).optional(),name:z.string().max(80).optional(),email:z.string().max(150).optional(),phone:z.string().max(30).optional(),vehicle:z.string().max(120).optional(),notes:z.string().max(1000).optional()});
 export type BookingDraft=z.infer<typeof draftSchema>;
 const tomorrowWords = /\b(?:tomorrow|tmr|tmrw|tmro|tmw)\b/i;
 const todayWords = /今天|今日|\btoday\b/i;
+const weekdayWords = /\b(?:sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/i;
 
 export function wantsEarliestBooking(text:string) {
  return /\b(?:asap|a\.s\.a\.p|as soon as possible|(?:earliest|soonest|first|next)\s+(?:available|opening|appointment|slot|time))\b|尽快|儘快|越快越好|最早(?:的)?(?:时段|時段|时间|時間|预约|預約)?/i.test(text);
@@ -19,23 +20,122 @@ export function bookingIntent(text:string) {
   (wantsEarliestBooking(text)&&/\b(?:fix|repair|come in|fit me in|available (?:slot|time)|check[- ]?in)\b|修车|修車|到店/i.test(text));
 }
 
+const detailLabels:Record<string,BookingField> = {
+ name:'name',email:'email',phone:'phone',vehicle:'vehicle',car:'vehicle',notes:'notes',
+ 姓名:'name',邮箱:'email',郵箱:'email',电话:'phone',電話:'phone',车辆:'vehicle',車輛:'vehicle',备注:'notes',備註:'notes',
+};
+const detailLabel=String.raw`\b(?:name|email|phone|vehicle|car|notes)\b|姓名|邮箱|郵箱|电话|電話|车辆|車輛|备注|備註`;
+const labelledDetail=new RegExp('^('+detailLabel+')\\s*[:：]\\s*([\\s\\S]*)$','i');
+const labelSeparator=new RegExp('[,，/／]\\s*(?=(?:'+detailLabel+')\\s*[:：])','i');
+
+function looksLikeName(value:string) {
+ return bookingDetailsSchema.shape.name.safeParse(value).success &&
+  !/^(?:(?:can|could|would|should|do|does|did|is|are|will|may|have|has)\s+(?:i|we|you|there|it|this|that)|i|we|please|thanks?|yes|no|ok(?:ay)?|hi|hello|hey|available|free|maybe|actually)\b/i.test(value) &&
+  !/^(?:what|which|when|where|why|how)\s+(?:i|we|you|can|could|would|is|are|do|does|long|much|many)\b/i.test(value);
+}
+
+function bookingName(value:string) {
+ return looksLikeName(value)&&!todayWords.test(value)&&!tomorrowWords.test(value)&&!weekdayWords.test(value)&&!wantsEarliestBooking(value);
+}
+
+function contactKind(value:string):Exclude<BookingField,'name'|'notes'>|undefined {
+ if(value.includes('@')&&!/\s/.test(value))return 'email';
+ if((/^(?:18|19|20)\d{2}\s+/.test(value)||/^[A-Za-z][A-Za-z0-9&.'+-]*(?:\s+[A-Za-z0-9&.'+/-]+)+\s+(?:18|19|20)\d{2}$/.test(value))&&
+    bookingDetailsSchema.shape.vehicle.safeParse(value).success)return 'vehicle';
+ if(!/^\d{1,4}\s*-\s*\d{1,2}\s*-\s*\d{1,4}$/.test(value)&&/^[+\d ()-]+$/.test(value)&&value.replace(/\D/g,'').length>=6)return 'phone';
+}
+
+function compactNameAndVehicle(value:string):[string,string]|undefined {
+ const match=value.match(/^([A-Za-z][A-Za-z .'-]+[A-Za-z])((?:19|20)\d{2}\s+\S.*)$/);
+ if(match&&match[1].includes(' ')&&looksLikeName(match[1])&&bookingDetailsSchema.shape.vehicle.safeParse(match[2]).success){
+  return [match[1],match[2]];
+ }
+}
+
+function contactParts(message:string) {
+ const lines=message.split(/[;；\r\n]+/).flatMap(line=>line.split(labelSeparator));
+ return lines.flatMap(line=>{
+  // Notes can contain natural language punctuation. Only another explicit label ends them.
+  const label=line.trim().match(labelledDetail);
+  if(label&&detailLabels[label[1].toLowerCase()]==='notes')return [line.trim()];
+  return line.split(/[,，]/).flatMap(chunk=>{
+   const pieces=chunk.split(/([/／])/);
+   const parts:string[]=[];
+   let current=pieces[0].trim();
+   for(let index=1;index<pieces.length;index+=2){
+    const next=pieces[index+1].trim();
+    const nextContact=contactKind(next);
+    const shortPhone=contactKind(current)==='vehicle'&&/^\d{3,7}$/.test(next);
+    const independentName=bookingName(next)&&next.includes(' ')&&
+     (contactKind(current)!=='vehicle'||/\s[/／]\s/.test(chunk));
+    const timingWord=todayWords.test(next)||tomorrowWords.test(next)||weekdayWords.test(next);
+    if(nextContact||shortPhone||labelledDetail.test(next)||independentName||timingWord){
+     if(current)parts.push(current);
+     current=next;
+    }else{
+     // Keep ambiguous slashes together, including 11/20 and model descriptors like 4WD/AWD.
+     current+=pieces[index]+next;
+    }
+   }
+   if(current)parts.push(current);
+   return parts.flatMap(part=>compactNameAndVehicle(part)??[part]);
+  });
+ });
+}
+
 export function extractBooking(message:string,previous:BookingDraft={},today=todaySydney()){
  const draft:BookingDraft={...previous};
  const answer=message.trim();
  const expected=previous.awaiting;
- const scheduleText=message.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi,'');
+ const capturedFields = new Set<BookingField>();
+ const invalidFields = new Set<BookingField>();
+ function capture(field:BookingField,value:string, reportInvalid=true) {
+  const parsed=bookingDetailsSchema.shape[field].safeParse(value);
+  if(parsed.success){
+   draft[field]=parsed.data;
+   capturedFields.add(field);
+   invalidFields.delete(field);
+  }else if(reportInvalid)invalidFields.add(field);
+ }
+
+ const parts=contactParts(message);
+ const labels=parts.map(part=>part.match(labelledDetail));
+ const multiField=parts.length>1&&parts.some(part=>contactKind(part)||labelledDetail.test(part));
+ const timingParts=parts.filter((part,index)=>!labels[index]&&!(multiField&&(contactKind(part)||bookingName(part))));
+ const scheduleText=timingParts.join('\n').replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi,'');
  const earliestRequested=wantsEarliestBooking(scheduleText);
  const shortTom=(expected!=='name'&&/^tom[.!?]*$/i.test(answer))||
   /\b(?:on|for|do) tom\b|\btom\s+(?:at|morning|afternoon|evening|\d)/i.test(scheduleText)||
   (bookingIntent(message)&&/\btom[.!?]*$/.test(answer));
  const tomorrow=tomorrowWords.test(scheduleText)||shortTom||/明天|明早|明晚|明晨/.test(scheduleText);
  let unclearDate=false,unclearTime=false;
- const parts=message.split(/[;；\n]+/);
- const keys:Record<string,'name'|'email'|'phone'|'vehicle'|'notes'>={name:'name',姓名:'name',email:'email',邮箱:'email',phone:'phone',电话:'phone',vehicle:'vehicle',car:'vehicle',车辆:'vehicle',notes:'notes',备注:'notes'};
- for(const part of parts){const match=/^\s*(name|姓名|email|邮箱|phone|电话|vehicle|car|车辆|notes|备注)\s*[:：]\s*(.*?)\s*$/i.exec(part);if(match)draft[keys[match[1].toLowerCase()]]=match[2];}
- const email=message.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);if(email)draft.email=email[0];
- const phone=message.match(/(?:\+\d{1,3}[ ()-]*)?(?:\b0\d|\+\d)[\d ()-]{6,24}\d\b/);if(phone&&!/\d{4}-\d{2}-\d{2}/.test(phone[0]))draft.phone=phone[0].trim();
- const vehicle=message.match(/\b((?:19|20)\d{2}\s+(?:Toyota|Honda|Mazda|Ford|BMW|Audi|Mercedes|Porsche|Hyundai|Kia|Nissan|Tesla|Volkswagen|Subaru|Holden|Lexus|Suzuki|Mitsubishi)\s+[A-Za-z0-9 -]+?)(?=[,;.\n]|\s+(?:and|with|at|for|on|tomorrow|tmr|tmrw|tmro|tmw)\b|$)/i);if(vehicle)draft.vehicle=vehicle[1].trim();
+ if(multiField){
+  // A single unlabelled name can accompany recognizable contact or vehicle fields.
+  const names=parts.filter(bookingName);
+  const hasOtherDetail=parts.some((part,index)=>contactKind(part)||labels[index]&&!['name','notes'].includes(detailLabels[labels[index]![1].toLowerCase()]));
+  if(names.length===1&&hasOtherDetail)capture('name',names[0]);
+  for(const [index,part] of parts.entries()){
+   const followsVehicle=index>0&&contactKind(parts[index-1])==='vehicle';
+   const contact=contactKind(part)||(followsVehicle&&/^\d{3,7}$/.test(part)?'phone':undefined);
+   if(contact)capture(contact,part);
+  }
+ }
+ for(const label of labels){
+  if(label)capture(detailLabels[label[1].toLowerCase()],label[2]);
+ }
+ const freeText=timingParts.join('\n');
+ if(!capturedFields.has('email')&&!invalidFields.has('email')){
+  const email=freeText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  if(email)capture('email',email[0],false);
+ }
+ if(!capturedFields.has('phone')&&!invalidFields.has('phone')){
+  const phone=freeText.match(/(?:\+\d{1,3}[ ()-]*)?(?:\b0\d|\+\d)[\d ()-]{6,24}\d\b/);
+  if(phone&&!/\d{4}-\d{2}-\d{2}/.test(phone[0]))capture('phone',phone[0],false);
+ }
+ if(!capturedFields.has('vehicle')&&!invalidFields.has('vehicle')){
+  const vehicle=freeText.match(/\b((?:19|20)\d{2}\s+(?:Toyota|Honda|Mazda|Ford|BMW|Audi|Mercedes|Porsche|Hyundai|Kia|Nissan|Tesla|Volkswagen|Subaru|Holden|Lexus|Suzuki|Mitsubishi)\s+[A-Za-z0-9 /-]+?)(?=[,;.\n]|\s+(?:and|with|at|for|on|tomorrow|tmr|tmrw|tmro|tmw)\b|$)/i);
+  if(vehicle)capture('vehicle',vehicle[1],false);
+ }
  const explicit=scheduleText.match(/\b(20\d{2})-(\d{2})-(\d{2})\b/);
  const chinese=scheduleText.match(/(?:(20\d{2})年)?(\d{1,2})月(\d{1,2})[日号]?/);
  const named=scheduleText.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)(?:\s+(20\d{2}))?\b/i)||scheduleText.match(/\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(20\d{2}))?\b/i);
@@ -86,27 +186,39 @@ export function extractBooking(message:string,previous:BookingDraft={},today=tod
  else if(unclearTime||unclearDate||(parsedDate&&parsedDate!==previous.date&&!/\bsame time\b|同一时间|同樣時間|同样时间|同一時間/i.test(answer)))delete draft.time;
  if(unclearDate)delete draft.date;
 
- const statedName=message.match(/\bmy name is\s+([A-Za-z][A-Za-z .'-]*?)(?=[,;\n]|$)/i);
- if(statedName)draft.name=statedName[1].trim();
- else if(!parsedDate&&!parsedTime&&!earliestRequested) {
-  const introduction=message.match(/\b(?:i am|i'm)\s+([A-Za-z][A-Za-z .'-]*?)(?=[,;\n]|$)/i);
-  if(introduction&&!/^(?:available|free|busy|looking|wondering|ready)\b/i.test(introduction[1]))draft.name=introduction[1].trim();
+ if(!capturedFields.has('name')&&!invalidFields.has('name')){
+  const statedName=freeText.match(/\bmy name is\s+([A-Za-z][A-Za-z .'-]*?)(?=[,;\n]|$)/i);
+  if(statedName)capture('name',statedName[1],false);
+  else if(!parsedDate&&!parsedTime&&!earliestRequested){
+   const introduction=freeText.match(/\b(?:i am|i'm)\s+([A-Za-z][A-Za-z .'-]*?)(?=[,;\n]|$)/i);
+   if(introduction&&looksLikeName(introduction[1])&&!/^(?:busy|looking|wondering|ready)\b/i.test(introduction[1]))capture('name',introduction[1],false);
+  }
  }
 
- // A new timing preference is not an answer to a name or vehicle question.
+ // Timing changes, acknowledgements and questions do not fill personal fields.
  if(expected&&['name','email','phone','vehicle','notes'].includes(expected)&&
+    !capturedFields.has(expected as BookingField)&&!invalidFields.has(expected as BookingField)&&!multiField&&
     !parsedDate&&!parsedTime&&!unclearDate&&!unclearTime&&!earliestRequested&&
     !bookingIntent(answer)&&!/[：:]/.test(answer)&&!/^(?:ok|yes|no|thanks|好的|可以)[.! ]*$/i.test(answer)){
-  const field=expected as 'name'|'email'|'phone'|'vehicle'|'notes';
-  if(bookingDetailsSchema.shape[field].safeParse(answer).success)draft[field]=answer;
+  const field=expected as BookingField;
+  if(field==='name'){
+   if(looksLikeName(answer)||/^[\p{L} .'-]+$/u.test(answer)&&!bookingDetailsSchema.shape.name.safeParse(answer).success)capture(field,answer);
+  }else if(field==='notes'||field==='email'&&!/\s/.test(answer)||field==='phone'&&/^[+\d ()-]+$/.test(answer)||field==='vehicle'&&!/[?？]/.test(answer)){
+   capture(field,answer);
+  }
  }
+
  return {
   draft:draftSchema.parse(draft),unclearDate,unclearTime,
   dateSpecified:!!parsedDate,timeSpecified:!!parsedTime,earliestRequested,
+  capturedFields:[...capturedFields],invalidFields:[...invalidFields],
  };
 }
 
-export function bookingStatus(draft:BookingDraft,available:string[],lang:Lang,today=todaySydney()){
+export function bookingStatus(draft:BookingDraft,available:string[],lang:Lang,today=todaySydney(),intake?:{
+ capturedFields:BookingField[];
+ invalidFields:BookingField[];
+}){
  const t=(zh:string,en:string)=>lang==='zh'?zh:en;
  if(!draft.date){
   const example=datePlus(today,1);
@@ -139,8 +251,41 @@ export function bookingStatus(draft:BookingDraft,available:string[],lang:Lang,to
   )};
  }
  if(!draft.service)return {ready:false,awaiting:'service' as const,reply:t('需要哪项服务：保养、刹车、电瓶、轮胎、空调或故障排查？','Which service: essential service, brakes, battery, tyres, air conditioning or diagnostics?')};
- const prompts={vehicle:['请告诉我车辆的英文品牌、车型和年份，例如“2020 Toyota Camry”。','What is your vehicle make, model and year? For example, 2020 Toyota Camry.'],name:['请问怎么称呼你？直接输入英文姓名即可。','What name should I put on the booking? Just type your name.'],email:['你的邮箱是什么？直接输入邮箱即可。','What is your email address? Just type the address.'],phone:['你的联系电话是什么？直接输入号码即可。','What is your contact phone number? Just type the number.']};
- for(const field of ['vehicle','name','email','phone'] as const){if(!bookingDetailsSchema.shape[field].safeParse(draft[field]).success)return {ready:false,awaiting:field,reply:prompts[field][lang==='zh'?0:1]+t(' 已提供的资料会保留，姓名和车辆资料请使用英文。',' Your other details are retained. Use English for names and vehicle details.')};}
- if(!bookingDetailsSchema.safeParse({...draft,notes:draft.notes||''}).success)return {ready:false,awaiting:'notes' as const,reply:t('请输入不超过 1000 字符的正常文本备注，或回复“notes:”清空。','Provide plain text notes (up to 1,000 characters), or reply "notes:" to clear them.')};
+ const fields=['name','vehicle','email','phone'] as const;
+ const labels={
+  name:t('姓名','name'),vehicle:t('车辆资料','vehicle details'),
+  email:t('邮箱','email address'),phone:t('电话号码','phone number'),notes:t('备注','notes'),
+ };
+ const examples={name:'Alex Smith',vehicle:'2020 Toyota Corolla',email:'alex@example.test',phone:'0491 570 006'};
+ const questions={
+  name:t('预约登记用哪个姓名？','What name should I put on the booking?'),
+  vehicle:t('车辆的英文品牌、型号和年份是什么？','What is the vehicle’s make, model and year?'),
+  email:t('你的邮箱地址是什么？','What is your email address?'),
+  phone:t('你的联系电话是什么？','What is your contact phone number?'),
+ };
+ const missing=fields.filter(field=>!bookingDetailsSchema.shape[field].safeParse(draft[field]).success);
+ const rejected=intake?.invalidFields[0];
+ const next=rejected??(['vehicle','name','email','phone'] as const).find(field=>missing.includes(field));
+ if(next==='notes'||(!next&&!bookingDetailsSchema.shape.notes.safeParse(draft.notes).success)){
+  return {ready:false,awaiting:'notes' as const,reply:t(
+   '备注请使用不超过 1000 个字符的文字，例如“低速刹车时有异响”。回复“notes:”可清空。',
+   'Use up to 1,000 characters for notes. For example, “Squeaks when braking at low speed.” Send “notes:” to clear them.',
+  )};
+ }
+ if(next){
+  const saved=intake?.capturedFields.filter(field=>field!==next)??[];
+  const savedList=new Intl.ListFormat(lang==='zh'?'zh-CN':'en-AU').format(saved.map(field=>labels[field]));
+  const ack=saved.length?t(`已记录${savedList}。`,`I’ve kept the ${savedList}. `):'';
+  const question=rejected?t(`${labels[next]}格式需要调整。`,`Please check the format of your ${labels[next]}. `):questions[next]+' ';
+  const englishFields=next==='name'||next==='vehicle';
+  const sample=englishFields
+   ?t(`请用英文填写，例如“${examples[next]}”。`,`Use English characters, for example “${examples[next]}”.`)
+   :t(`例如“${examples[next]}”。`,`For example, “${examples[next]}”.`);
+  const combined=!rejected&&missing.length>1
+   ?t(` 也可以一次填写多项，用斜线分隔，例如“${missing.map(field=>examples[field]).join(' / ')}”。`,
+       ` You can also send multiple details together, separated by slashes. For example, “${missing.map(field=>examples[field]).join(' / ')}”.`)
+   :'';
+  return {ready:false,awaiting:next,reply:ack+question+sample+combined};
+ }
  return {ready:true,reply:t('资料已准备好。请核对下面的预约卡并点击“确认预约”。现在尚未保存，时段也尚未锁定。','Your details are ready. Review the booking card and select Confirm booking. Nothing has been saved and the slot is not held yet.')};
 }

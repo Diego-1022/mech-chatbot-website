@@ -5,7 +5,7 @@ import {z} from "zod";
 import {database} from "@/db";
 import {getChatGPTUser} from "@/app/chatgpt-auth";
 import {services,times,validSlot,todaySydney,datePlus,withServicePrices,type Lang,type ServicePrice} from "@/lib/catalog";
-import {assistantReply} from "@/lib/assistant";
+import {assistantReply,symptomGuidance} from "@/lib/assistant";
 import {openaiReply,AIError} from "@/lib/openai-assistant";
 import {analyseFinancials} from "@/lib/openai-financials";
 import {bookingEstimate,type FinancialSummary} from "@/lib/workshop-financials";
@@ -232,9 +232,11 @@ export async function POST(request:Request){return run(async()=>{
   const customer=await currentCustomer(request);
   if(b.customerId!==(customer?.id||null))throw new Problem(409,"SESSION_CHANGED");
   const data=z.object({message:z.string().trim().min(1).max(1500),lang:z.enum(["en","zh"]),draft:draftSchema.default({})}).parse(b);
-  if(/smoke|fire|fuel leak|brake failure|overheat|冒烟|着火|失灵|过热|燃油泄漏/i.test(data.message))return reply({...assistantReply(data.message,data.lang),bookingDraft:data.draft,bookingReady:false,mode:"guide"});
+  const safety=symptomGuidance(data.message,data.lang);
+  if(safety?.service===null)return reply({...safety,bookingDraft:data.draft,bookingReady:false,mode:"guide"});
   const today=todaySydney(), zh=data.lang==="zh";
-  const {draft,dateSpecified,timeSpecified,earliestRequested,unclearDate,unclearTime}=extractBooking(data.message,data.draft,today);
+  const parsed=extractBooking(data.message,data.draft,today);
+  const {draft,dateSpecified,timeSpecified,earliestRequested,unclearDate,unclearTime}=parsed;
   if(customer){draft.name ||= customer.name;draft.email ||= customer.email;}
   let available=draft.date?await availableOn(draft.date):[];
   let intro="";
@@ -261,7 +263,7 @@ export async function POST(request:Request){return run(async()=>{
    const when=bookingDay(draft.date,data.lang)+" "+draft.time;
    intro=zh?`已把 ${when}（悉尼时间）填入预约草稿。`:`I’ve entered ${when} (Sydney time) in your booking draft. `;
   }
-  const status=bookingStatus(draft,available,data.lang,today);
+  const status=bookingStatus(draft,available,data.lang,today,parsed);
   let alternative="";
   if(draft.date&&!available.length){
    const start=z.string().date().safeParse(draft.date).success&&draft.date>=today
