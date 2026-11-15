@@ -51,7 +51,11 @@
 .chat-composer{min-width:0;background:#202a2f}
 .chat-composer .human-check{margin:0;padding:0 15px}
 .chat-composer .human-check iframe{display:block}
-.chat-verification-status{padding:8px 15px;color:#f4d77e}
+.chat-verification-status,.chat-booking-context{display:flex;align-items:center;gap:7px;padding:8px 15px;color:#f4d77e}
+.chat-verification-status svg,.chat-booking-context svg{flex:none}
+.chat-booking-context{flex-wrap:wrap}
+.chat-booking-context span{display:flex;align-items:center;gap:7px;margin-inline-end:auto}
+.chat-booking-context .link{padding:4px;color:#f5f2e9;font-size:inherit}
 
 @media (max-width: 640px) {
   .chat-launch.chat-launch--booking-visible { display: none; }

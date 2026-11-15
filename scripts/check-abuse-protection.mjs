@@ -25,6 +25,48 @@ await rejects('Foreign hostname rejected',()=>mod.verifyHuman(request,'token','c
 globalThis.fetch=async()=>Response.json({success:false,'error-codes':['timeout-or-duplicate']});
 await rejects('Provider rejects expired or reused token',()=>mod.verifyHuman(request,'token','chat'),'HUMAN_REQUIRED');
 globalThis.fetch=async()=>{throw new Error('offline')};await rejects('Verification outage fails closed',()=>mod.verifyHuman(request,'token','chat'),'PROTECTION_UNAVAILABLE');
+const chatRequest=(cookie='',ip='192.0.2.1',origin='https://harbour.example')=>new Request(origin+'/api/workshop',{headers:{Cookie:cookie,'cf-connecting-ip':ip}});
+env.TURNSTILE_REQUIRED='false';
+check('Chat check disabled when Turnstile is disabled',await mod.verifyChatHuman(request,null)===undefined);
+env.TURNSTILE_REQUIRED='true';
+delete env.TURNSTILE_SITE_KEY;
+await rejects('Chat check fails closed without provider configuration',()=>mod.verifyChatHuman(request,'token'),'PROTECTION_UNAVAILABLE');
+env.TURNSTILE_SITE_KEY='mock';
+await rejects('Chat check fails closed during provider outage',()=>mod.verifyChatHuman(request,'token'),'PROTECTION_UNAVAILABLE');
+globalThis.fetch=async()=>Response.json({success:false,'error-codes':['timeout-or-duplicate']});
+await rejects('Rejected Turnstile token cannot issue a chat proof',()=>mod.verifyChatHuman(request,'token'),'HUMAN_REQUIRED');
+const restoreChatClock=Date.now;
+let chatNow=1800000000000;
+Date.now=()=>chatNow;
+try {
+  let providerCalls=0;
+  globalThis.fetch=async()=>{
+    providerCalls++;
+    return Response.json({success:true,hostname:'harbour.example',action:'chat'});
+  };
+  const proof=await mod.verifyChatHuman(request,'one-time-token','customer-one');
+  const cookie=proof.split(';')[0];
+  check('Valid chat challenge issues a bounded private cookie',proof.includes('HttpOnly; SameSite=Strict; Max-Age=1200; Secure')&&proof.includes('Path=/api/workshop'));
+  check('Chat cookie does not expose the raw provider token or identity',!proof.includes('one-time-token')&&!proof.includes('customer-one')&&!proof.includes('192.0.2.1'));
+  check('Valid chat proof reuses server approval without a fresh provider call',await mod.verifyChatHuman(chatRequest(cookie),null,'customer-one')===undefined&&providerCalls===1);
+  await rejects('Account change requires a fresh challenge',()=>mod.verifyChatHuman(chatRequest(cookie),null,'customer-two'),'HUMAN_REQUIRED');
+  await rejects('Signed-out guest cannot use an account proof',()=>mod.verifyChatHuman(chatRequest(cookie),null),'HUMAN_REQUIRED');
+  await rejects('Changing IP requires a fresh challenge',()=>mod.verifyChatHuman(chatRequest(cookie,'192.0.2.99'),null,'customer-one'),'HUMAN_REQUIRED');
+  await rejects('Changing hostname requires a fresh challenge',()=>mod.verifyChatHuman(chatRequest(cookie,'192.0.2.1','https://other.example'),null,'customer-one'),'HUMAN_REQUIRED');
+  const tampered=cookie.slice(0,-1)+(cookie.endsWith('0')?'1':'0');
+  await rejects('Tampered chat proof requires a fresh challenge',()=>mod.verifyChatHuman(chatRequest(tampered),null,'customer-one'),'HUMAN_REQUIRED');
+  await rejects('Chat proof cannot be used in an account form',()=>mod.verifyHuman(chatRequest(cookie),null,'login'),'HUMAN_REQUIRED');
+  const guestProof=(await mod.verifyChatHuman(request,'guest-token')).split(';')[0];
+  check('Guest can reuse chat proof as a guest',await mod.verifyChatHuman(chatRequest(guestProof),null)===undefined&&providerCalls===2);
+  await rejects('Guest proof cannot be used after sign-in',()=>mod.verifyChatHuman(chatRequest(guestProof),null,'customer-one'),'HUMAN_REQUIRED');
+  chatNow+=1199*1000;
+  check('Proof remains usable until its original expiry',await mod.verifyChatHuman(chatRequest(cookie),null,'customer-one')===undefined&&providerCalls===2);
+  chatNow+=1000;
+  await rejects('Proof expires after 20 minutes without renewal from use',()=>mod.verifyChatHuman(chatRequest(cookie),null,'customer-one'),'HUMAN_REQUIRED');
+  check('A fresh valid challenge can replace an expired proof',!!await mod.verifyChatHuman(chatRequest(cookie),'new-token','customer-one')&&providerCalls===3);
+} finally {
+  Date.now=restoreChatClock;
+}
 let outcomes=await Promise.all(Array.from({length:25},()=>mod.paidChatAllowed(request,'same-account')));check('Concurrent account limit admits only 20',outcomes.filter(Boolean).length===20);
 for(let i=0;i<5;i++)check('Other account shares remaining IP allowance '+i,await mod.paidChatAllowed(request,'other-account'));
 check('New account cannot reset IP daily allowance',!await mod.paidChatAllowed(request,'third-account'));
