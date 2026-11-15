@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 const bundled=await build({entryPoints:['lib/conversation-booking.ts'],bundle:true,platform:'node',format:'esm',write:false});
-const {extractBooking,bookingStatus,bookingIntent,wantsEarliestBooking}=await import('data:text/javascript;base64,'+Buffer.from(bundled.outputFiles[0].text).toString('base64'));
+const {extractBooking,bookingStatus,bookingIntent,wantsEarliestBooking,consultationBookingContext}=await import('data:text/javascript;base64,'+Buffer.from(bundled.outputFiles[0].text).toString('base64'));
 let n=0;const check=(name,value)=>{assert.ok(value,name);n++;console.log('PASS '+name)};
 const today='2026-11-06';
 for(const [input,date,time] of [['Book brakes tomorrow at 10am','2026-11-07','10:00'],['帮我预约下周一上午十点','2026-11-09','10:00'],['Book 2026-11-10 at 2pm','2026-11-10','14:00'],['Book 10 November at 13:00','2026-11-10','13:00'],['November 10 at 11am','2026-11-10','11:00'],['11月10日下午两点','2026-11-10','14:00'],['the day after tomorrow at 9am','2026-11-08','09:00']]){const {draft}=extractBooking(input,{},today);check(input,draft.date===date&&draft.time===time)}
@@ -130,6 +130,48 @@ check('An unrelated pricing question is not used as a name',
 check('Unaffected plain vehicle and phone answers still work',
  extractBooking(testVehicle,{awaiting:'vehicle'},today).draft.vehicle===testVehicle&&
  extractBooking(testPhone,{awaiting:'phone'},today).draft.phone===testPhone);
+const compactConsultation='my car is 2020toyota corolla and idk waht happend my car squeaks when i brake lightly';
+const compactVehicle=extractBooking(compactConsultation,{},today).draft;
+check('Compact year and make in the reported consultation are recognised',compactVehicle.vehicle.toLowerCase()==='2020 toyota corolla');
+const compactSlash=extractBooking('Alex Smith / 2020toyota corolla / 0491570006',{awaiting:'name'},today).draft;
+check('Compact vehicle also works with slash-delimited contacts',compactSlash.name===testName&&compactSlash.vehicle.toLowerCase()==='2020 toyota corolla'&&compactSlash.phone==='0491570006');
+const savedPhotoConsultation=[
+ {role:'user',text:compactConsultation,imageCount:1},
+ {role:'assistant',text:'A brake inspection may be helpful.',service:'brakes'},
+];
+const recovered=consultationBookingContext(savedPhotoConsultation);
+check('Restored consultation carries vehicle and suggested service without needing the image',recovered.vehicle===compactVehicle.vehicle&&recovered.service==='brakes');
+check('The latest stated vehicle wins over the earlier one and assistant examples are ignored',consultationBookingContext([
+ ...savedPhotoConsultation,{role:'user',text:'Actually, it is my 2022 Mazda CX-5.'},
+ {role:'assistant',text:'For example, 2018 Toyota Corolla.'},
+]).vehicle==='2022 Mazda CX-5');
+check('Empty consultation or local-only booking turns do not supply a vehicle',!consultationBookingContext([]).vehicle&&!consultationBookingContext([
+ {role:'user',text:compactConsultation,localBooking:true},
+]).vehicle);
+const reviewWithRecoveredVehicle=bookingStatus({...chosenSlot,...recovered},['10:00'],'en');
+check('Restored vehicle skips the make/model/year prompt and asks for name',reviewWithRecoveredVehicle.awaiting==='name');
+const compactAppointment=extractBooking('appt for a/c tues arvo',{},screenshotDay);
+check('Appointment, service, weekday and Australian afternoon shorthand combine naturally',
+ bookingIntent('appt for a/c tues arvo')&&compactAppointment.draft.service==='aircon'&&
+ compactAppointment.draft.date==='2026-11-17'&&compactAppointment.period==='afternoon'&&!compactAppointment.draft.time);
+const weekdayClock=extractBooking('Can we do Tues. at 2 p.m.?',{},screenshotDay);
+check('Conversational abbreviated weekday and dotted PM parse together',
+ bookingIntent('Can we do Tues. at 2 p.m.?')&&weekdayClock.draft.date==='2026-11-17'&&weekdayClock.draft.time==='14:00');
+check('Weekday followed by an unambiguous opening hour is accepted',
+ extractBooking('tues 10',{awaiting:'date'},screenshotDay).draft.time==='10:00');
+const ambiguousHour=extractBooking('tmr 2',{date:'2026-11-16',time:'10:00',awaiting:'time'},screenshotDay);
+check('Bare 2 is clarified instead of reusing a previous time',
+ ambiguousHour.draft.date==='2026-11-16'&&ambiguousHour.unclearTime&&!ambiguousHour.draft.time);
+const compactMorning=extractBooking('appt 2moro am',{},screenshotDay);
+check('Tomorrow and morning shorthand are both retained',
+ compactMorning.draft.date==='2026-11-16'&&compactMorning.period==='morning');
+check('Common service aliases match a booking service',
+ extractBooking('batt',{awaiting:'service'},screenshotDay).draft.service==='battery'&&
+ extractBooking('diag',{awaiting:'service'},screenshotDay).draft.service==='diagnostic'&&
+ extractBooking('svc',{awaiting:'service'},screenshotDay).draft.service==='service');
+check('An abbreviated weekday inside a customer name is not a scheduling change',
+ extractBooking('Alex Sun',{awaiting:'name',date:'2026-11-16'},screenshotDay).draft.name==='Alex Sun'&&
+ extractBooking('Alex Sun',{awaiting:'name',date:'2026-11-16'},screenshotDay).draft.date==='2026-11-16');
 console.log(`${n} conversation extraction checks passed.`);
 
 if(process.argv[2]){

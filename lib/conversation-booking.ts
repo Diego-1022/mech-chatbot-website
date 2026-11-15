@@ -3,18 +3,24 @@ import {datePlus,todaySydney,services,validSlot,type Lang} from './catalog';
 import {bookingDetailsSchema,type BookingField} from './booking-input';
 export const draftSchema=z.object({awaiting:z.enum(['date','time','service','vehicle','name','email','phone','notes']).optional(),service:z.enum(services.map(s=>s.id) as [string,...string[]]).optional(),date:z.string().max(10).optional(),time:z.string().max(5).optional(),name:z.string().max(80).optional(),email:z.string().max(150).optional(),phone:z.string().max(30).optional(),vehicle:z.string().max(120).optional(),notes:z.string().max(1000).optional()});
 export type BookingDraft=z.infer<typeof draftSchema>;
-const tomorrowWords = /\b(?:tomorrow|tmr|tmrw|tmro|tmw)\b/i;
+const tomorrowPattern='(?:tomorrow|tmr|tmrw|tmro|tmw|2moro|2morrow|2mrw)';
+const tomorrowWords=new RegExp('\\b'+tomorrowPattern+'\\b','i');
 const todayWords = /今天|今日|\btoday\b/i;
 const weekdayWords = /\b(?:sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/i;
+const weekdayShortPattern='(?:sun|mon|tues?|wed|thu(?:rs?)?|fri|sat)';
+const abbreviatedWeekday=new RegExp('\\b('+weekdayShortPattern+')\\b','i');
+const datedWeekday=new RegExp('\\b(?:on|for|next|this)\\s+('+weekdayShortPattern+')\\b','i');
+const weekdayWithTime=new RegExp('^('+weekdayShortPattern+')\\.?(?:[.!?]*$|\\s+(?:at\\b|[0-9]|arvo\\b|morning\\b|am\\b|pm\\b))','i');
+const dayAndHour=new RegExp('\\b(?:today|'+tomorrowPattern+'|'+weekdayShortPattern+'|'+weekdayWords.source+')\\.?\\s+(?:at\\s+)?(?:(?:arvo|morning|afternoon)\\s+)?(\\d{1,2})(?:\\s+(?:arvo|morning|afternoon))?[.!? ]*$','i');
 
 export function wantsEarliestBooking(text:string) {
- return /\b(?:asap|a\.s\.a\.p|as soon as possible|(?:earliest|soonest|first|next)\s+(?:available|opening|appointment|slot|time))\b|尽快|儘快|越快越好|最早(?:的)?(?:时段|時段|时间|時間|预约|預約)?/i.test(text);
+ return /\b(?:asap|a\.s\.a\.p|as soon as possible|(?:earliest|soonest|first|next)\s+(?:avail(?:able)?|opening|appointment|appt|slot|time))\b|尽快|儘快|越快越好|最早(?:的)?(?:时段|時段|时间|時間|预约|預約)?/i.test(text);
 }
 
 export function bookingIntent(text:string) {
  if(/取消|改期|cancel|reschedul/i.test(text))return false;
- if(/预约|預約|\bbook(?:ing)?\b|\bappointment\b/i.test(text))return true;
- const timing=tomorrowWords.test(text)||todayWords.test(text)||/\btom\b|明天|明早|明晨|明晚/i.test(text);
+ if(/预约|預約|\b(?:book(?:ing)?|appointments?|appts?)\b/i.test(text))return true;
+ const timing=tomorrowWords.test(text)||todayWords.test(text)||weekdayWords.test(text)||abbreviatedWeekday.test(text)||/\btom\b|明天|明早|明晨|明晚/i.test(text);
  const scheduling=/\b(?:can we do|let(?:'|’)s do|lets do|fit me in|can i come in)\b/i.test(text);
  return (timing&&scheduling)||
   (wantsEarliestBooking(text)&&/\b(?:fix|repair|come in|fit me in|available (?:slot|time)|check[- ]?in)\b|修车|修車|到店/i.test(text));
@@ -27,6 +33,13 @@ const detailLabels:Record<string,BookingField> = {
 const detailLabel=String.raw`\b(?:name|email|phone|vehicle|car|notes)\b|姓名|邮箱|郵箱|电话|電話|车辆|車輛|备注|備註`;
 const labelledDetail=new RegExp('^('+detailLabel+')\\s*[:：]\\s*([\\s\\S]*)$','i');
 const labelSeparator=new RegExp('[,，/／]\\s*(?=(?:'+detailLabel+')\\s*[:：])','i');
+const vehicleMakes='Toyota|Honda|Mazda|Ford|BMW|Audi|Mercedes|Porsche|Hyundai|Kia|Nissan|Tesla|Volkswagen|Subaru|Holden|Lexus|Suzuki|Mitsubishi';
+const compactVehicleYear=new RegExp(String.raw`\b((?:19|20)\d{2})(${vehicleMakes})(?=\s+[A-Za-z0-9])`,'gi');
+const vehicleInText=new RegExp(String.raw`\b((?:19|20)\d{2}\s+(?:${vehicleMakes})\s+[A-Za-z0-9 /-]+?)(?=[,;.\n]|\s+(?:and|with|at|for|on|tomorrow|tmr|tmrw|tmro|tmw)\b|$)`,'i');
+
+function spaceVehicleYear(value:string) {
+ return value.replace(compactVehicleYear,'$1 $2');
+}
 
 function looksLikeName(value:string) {
  return bookingDetailsSchema.shape.name.safeParse(value).success &&
@@ -35,13 +48,15 @@ function looksLikeName(value:string) {
 }
 
 function bookingName(value:string) {
- return looksLikeName(value)&&!todayWords.test(value)&&!tomorrowWords.test(value)&&!weekdayWords.test(value)&&!wantsEarliestBooking(value);
+ return looksLikeName(value)&&!todayWords.test(value)&&!tomorrowWords.test(value)&&!weekdayWords.test(value)&&
+  !datedWeekday.test(value)&&!wantsEarliestBooking(value);
 }
 
 function contactKind(value:string):Exclude<BookingField,'name'|'notes'>|undefined {
  if(value.includes('@')&&!/\s/.test(value))return 'email';
- if((/^(?:18|19|20)\d{2}\s+/.test(value)||/^[A-Za-z][A-Za-z0-9&.'+-]*(?:\s+[A-Za-z0-9&.'+/-]+)+\s+(?:18|19|20)\d{2}$/.test(value))&&
-    bookingDetailsSchema.shape.vehicle.safeParse(value).success)return 'vehicle';
+ const vehicle=spaceVehicleYear(value);
+ if((/^(?:18|19|20)\d{2}\s+/.test(vehicle)||/^[A-Za-z][A-Za-z0-9&.'+-]*(?:\s+[A-Za-z0-9&.'+/-]+)+\s+(?:18|19|20)\d{2}$/.test(vehicle))&&
+    bookingDetailsSchema.shape.vehicle.safeParse(vehicle).success)return 'vehicle';
  if(!/^\d{1,4}\s*-\s*\d{1,2}\s*-\s*\d{1,4}$/.test(value)&&/^[+\d ()-]+$/.test(value)&&value.replace(/\D/g,'').length>=6)return 'phone';
 }
 
@@ -69,7 +84,8 @@ function contactParts(message:string) {
     const independentName=bookingName(next)&&next.includes(' ')&&
      (contactKind(current)!=='vehicle'||/\s[/／]\s/.test(chunk));
     const timingWord=todayWords.test(next)||tomorrowWords.test(next)||weekdayWords.test(next);
-    if(nextContact||shortPhone||labelledDetail.test(next)||independentName||timingWord){
+    const airConditioning=/\ba$/i.test(current)&&/^c\b/i.test(next);
+    if(!airConditioning&&(nextContact||shortPhone||labelledDetail.test(next)||independentName||timingWord)){
      if(current)parts.push(current);
      current=next;
     }else{
@@ -90,7 +106,7 @@ export function extractBooking(message:string,previous:BookingDraft={},today=tod
  const capturedFields = new Set<BookingField>();
  const invalidFields = new Set<BookingField>();
  function capture(field:BookingField,value:string, reportInvalid=true) {
-  const parsed=bookingDetailsSchema.shape[field].safeParse(value);
+  const parsed=bookingDetailsSchema.shape[field].safeParse(field==='vehicle'?spaceVehicleYear(value):value);
   if(parsed.success){
    draft[field]=parsed.data;
    capturedFields.add(field);
@@ -102,7 +118,8 @@ export function extractBooking(message:string,previous:BookingDraft={},today=tod
  const labels=parts.map(part=>part.match(labelledDetail));
  const multiField=parts.length>1&&parts.some(part=>contactKind(part)||labelledDetail.test(part));
  const timingParts=parts.filter((part,index)=>!labels[index]&&!(multiField&&(contactKind(part)||bookingName(part))));
- const scheduleText=timingParts.join('\n').replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi,'');
+ const scheduleText=timingParts.join('\n').replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi,'')
+  .replace(/(\d)\s*([ap])\s*\.\s*m\.?(?![a-z])/gi,'$1$2m');
  const earliestRequested=wantsEarliestBooking(scheduleText);
  const shortTom=(expected!=='name'&&/^tom[.!?]*$/i.test(answer))||
   /\b(?:on|for|do) tom\b|\btom\s+(?:at|morning|afternoon|evening|\d)/i.test(scheduleText)||
@@ -133,7 +150,7 @@ export function extractBooking(message:string,previous:BookingDraft={},today=tod
   if(phone&&!/\d{4}-\d{2}-\d{2}/.test(phone[0]))capture('phone',phone[0],false);
  }
  if(!capturedFields.has('vehicle')&&!invalidFields.has('vehicle')){
-  const vehicle=freeText.match(/\b((?:19|20)\d{2}\s+(?:Toyota|Honda|Mazda|Ford|BMW|Audi|Mercedes|Porsche|Hyundai|Kia|Nissan|Tesla|Volkswagen|Subaru|Holden|Lexus|Suzuki|Mitsubishi)\s+[A-Za-z0-9 /-]+?)(?=[,;.\n]|\s+(?:and|with|at|for|on|tomorrow|tmr|tmrw|tmro|tmw)\b|$)/i);
+  const vehicle=spaceVehicleYear(freeText).match(vehicleInText);
   if(vehicle)capture('vehicle',vehicle[1],false);
  }
  const explicit=scheduleText.match(/\b(20\d{2})-(\d{2})-(\d{2})\b/);
@@ -154,14 +171,21 @@ export function extractBooking(message:string,previous:BookingDraft={},today=tod
  else {
   const weekdays=['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
   const week=scheduleText.match(/\b(?:(next|this)\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/i);
+  const shortDay=scheduleText.match(datedWeekday)||
+   (expected==='date'||expected==='time'||bookingIntent(scheduleText)?scheduleText.match(abbreviatedWeekday):null)||
+   (expected!=='name'?scheduleText.trim().match(weekdayWithTime):null);
   const zh=scheduleText.match(/(下|本|这)?(?:周|週|星期)([日天一二三四五六])/);
-  if(week||zh){
-   const target=week?weekdays.indexOf(week[2].toLowerCase()):'日一二三四五六'.indexOf(zh![2].replace('天','日'));
+  if(week||shortDay||zh){
+   const englishDay=week?.[2]||shortDay?.[1];
+   const target=englishDay?weekdays.findIndex(day=>day.startsWith(englishDay.toLowerCase())):'日一二三四五六'.indexOf(zh![2].replace('天','日'));
    const delta=(target-new Date(today+'T12:00:00Z').getUTCDay()+7)%7;
    parsedDate=datePlus(today,delta||7);
   }else if(/\b\d{1,2}[/-]\d{1,2}\b|next week|下周|下週|weekend|周末/i.test(scheduleText))unclearDate=true;
  }
  if(parsedDate)draft.date=parsedDate;
+ const period=/\b(?:arvo|afternoon)\b|下午/.test(scheduleText.toLowerCase())||parsedDate&&/\bpm[.!? ]*$/i.test(scheduleText)&&!/\d\s*pm\b/i.test(scheduleText)
+  ? 'afternoon' : /\b(?:morning|morn)\b|早上|上午|明早|明晨/.test(scheduleText.toLowerCase())||parsedDate&&/\bam[.!? ]*$/i.test(scheduleText)&&!/\d\s*am\b/i.test(scheduleText)
+   ? 'morning' : undefined;
  const timeText=scheduleText.replace(/明早|明晨/g,'上午').replace(/明晚/g,'晚上').replace(/(上午|下午|早上|晚上)?([一二三四五六七八九十两]+)([点點])/g,(_,prefix,n,suffix)=>{const numbers:Record<string,number>={一:1,二:2,两:2,三:3,四:4,五:5,六:6,七:7,八:8,九:9};const value=n==='十'?10:n.includes('十')?(numbers[n.split('十')[0]]||1)*10+(numbers[n.split('十')[1]]||0):numbers[n];return (prefix||'')+(value||n)+suffix;});
  const clock=timeText.match(/\b(\d{1,2})(?::([0-5]\d))?\s*(am|pm)\b/i)||timeText.match(/\b(\d{1,2}):([0-5]\d)\b/)||timeText.match(/(?:at\s+|上午|下午|早上|晚上)(\d{1,2})(?:点|點|时|時)?(?::([0-5]\d))?/i)||timeText.match(/(\d{1,2})(?:点|點|时|時)(半)?/);
  let parsedTime:string|undefined;
@@ -171,13 +195,24 @@ export function extractBooking(message:string,previous:BookingDraft={},today=tod
   if(suffix){
    if(hour<1||hour>12)unclearTime=true;
    hour=hour%12+(suffix==='pm'?12:0);
-  }else if(/下午|晚上|明晚/.test(message)&&hour<12)hour+=12;
-  else if(hour<9&&!/上午|早上|\d{1,2}:\d{2}/.test(clock[0]))unclearTime=true;
+  }else if((period==='afternoon'||/晚上|明晚/.test(scheduleText))&&hour<12)hour+=12;
+  else if(hour<9&&period!=='morning'&&!/上午|早上|\d{1,2}:\d{2}/.test(clock[0]))unclearTime=true;
   if(hour>23)unclearTime=true;
   const minute=clock[2]==='半'?'30':clock[2]||'00';
   if(!unclearTime)parsedTime=String(hour).padStart(2,'0')+':'+minute;
  }
- const service=/刹车|brake/i.test(message)?'brakes':/电瓶|battery/i.test(message)?'battery':/轮胎|tyres?|tires?|alignment/i.test(message)?'tyres':/空调|air.?con/i.test(message)?'aircon':/保养|oil|maintenance|\bservice\b/i.test(message)&&!/diagnostic/i.test(message)?'service':/故障|diagnostic/i.test(message)?'diagnostic':null;if(service)draft.service=service;
+ if(!clock&&parsedDate){
+  const shortHour=scheduleText.match(dayAndHour);
+  if(shortHour){
+   let hour=Number(shortHour[1]);
+   if(period==='afternoon'&&hour>=1&&hour<12)hour+=12;
+   if(hour>=9&&hour<=16)parsedTime=String(hour).padStart(2,'0')+':00';
+   else unclearTime=true;
+  }
+ }
+ const serviceText=scheduleText.trim();
+ const service=/刹车|brake|\bbrks?\b/i.test(serviceText)?'brakes':/电瓶|battery|\bbatt\b/i.test(serviceText)?'battery':/轮胎|tyres?|tires?|alignment/i.test(serviceText)?'tyres':/空调|air.?con|\ba\/?c\b/i.test(serviceText)?'aircon':/故障|diagnostic|\b(?:diag|cel|dtc scan)\b/i.test(serviceText)?'diagnostic':/保养|oil|maintenance|\b(?:service|svc)\b/i.test(serviceText)?'service':null;
+ if(service)draft.service=service;
  if(expected==='time'&&/^\d{1,2}$/.test(answer)){
   const hour=Number(answer);
   if(hour>=9&&hour<=16)parsedTime=String(hour).padStart(2,'0')+':00';
@@ -211,13 +246,32 @@ export function extractBooking(message:string,previous:BookingDraft={},today=tod
  return {
   draft:draftSchema.parse(draft),unclearDate,unclearTime,
   dateSpecified:!!parsedDate,timeSpecified:!!parsedTime,earliestRequested,
+  period,
   capturedFields:[...capturedFields],invalidFields:[...invalidFields],
  };
+}
+
+export function consultationBookingContext(history:readonly {
+ role:'user'|'assistant';
+ text:string;
+ service?:string;
+ localBooking?:boolean;
+}[]):Pick<BookingDraft,'vehicle'|'service'> {
+ const recent=history.filter(message=>!message.localBooking).slice(-8).reverse();
+ const suggested=recent.find(message=>message.role==='assistant')?.service;
+ const service=services.some(item=>item.id===suggested)?suggested:undefined;
+ for(const message of recent){
+  if(message.role!=='user')continue;
+  const {vehicle}=extractBooking(message.text).draft;
+  if(vehicle)return {vehicle,service};
+ }
+ return {service};
 }
 
 export function bookingStatus(draft:BookingDraft,available:string[],lang:Lang,today=todaySydney(),intake?:{
  capturedFields:BookingField[];
  invalidFields:BookingField[];
+ unclearTime?:boolean;
 }){
  const t=(zh:string,en:string)=>lang==='zh'?zh:en;
  if(!draft.date){
@@ -244,7 +298,8 @@ export function bookingStatus(draft:BookingDraft,available:string[],lang:Lang,to
   return {ready:false,awaiting:'date' as const,reply:message};
  }
  if(!draft.time||!validSlot(draft.date,draft.time)||!available.includes(draft.time)){
-  const explanation=draft.time?t(`${draft.time} 不可预约。`,`${draft.time} isn’t available. `):'';
+  const explanation=intake?.unclearTime?t('请注明上午或下午，例如“下午两点”。','Please specify am or pm, for example “2 pm”. ')
+   :draft.time?t(`${draft.time} 不可预约。`,`${draft.time} isn’t available. `):'';
   return {ready:false,awaiting:'time' as const,reply:explanation+t(
    `${draft.date} 可在 ${available.join('、')} 到店（悉尼时间）。你想选几点？`,
    `On ${draft.date}, I can offer ${available.join(', ')} (Sydney time). Which time suits you?`,

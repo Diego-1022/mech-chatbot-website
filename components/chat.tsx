@@ -1,5 +1,5 @@
 "use client";
-import {bookingIntent,extractBooking,wantsEarliestBooking,type BookingDraft} from "@/lib/conversation-booking";
+import {bookingIntent,consultationBookingContext,extractBooking,wantsEarliestBooking,type BookingDraft} from "@/lib/conversation-booking";
 import {HumanCheck,type Protection} from "./human-check";
 import {useState,useRef,useEffect,useCallback} from "react";
 import {CalendarDays,Check,Send,MessageCircle,ImagePlus} from "lucide-react";
@@ -19,7 +19,7 @@ export default function Chat({open,setOpen,lang,hideLauncherOnMobile=false}:{ope
  const [bookingActive,setBookingActive]=useState(false);
  const [bookingOpen,setBookingOpen]=useState(false),[review,setReview]=useState<BookingReview|null>(null);
  const draft=useRef<BookingDraft>({}),bookingCompleted=useRef(false),bookingPhotos=useRef<SelectedPhoto[]>([]);
- const customerId=useRef<string|null>(null);
+ const customerId=useRef<string|null>(null),startedNewEnquiry=useRef(false);
  const [photos,setPhotos]=useState<SelectedPhoto[]>([]),[showPhotos,setShowPhotos]=useState(false),[checkingPhotos,setCheckingPhotos]=useState(false);
  const preparedPhotos=useRef<{source:SelectedPhoto[];images:ChatImage[]}>(null);
  const sending=useRef(false);
@@ -56,8 +56,11 @@ export default function Chat({open,setOpen,lang,hideLauncherOnMobile=false}:{ope
   fetch("/api/account").then(async r=>{if(!r.ok)throw new Error();return r.json() as Promise<{user:{id:string}|null;history:Message[];protection:Protection}>}).then(b=>{
    if(cancelled)return;setProtection(b.protection);
    const accountChanged=customerId.current!==(b.user?.id||null);
-   if(accountChanged)resetIntake();
-   if(b.user){setMessages(previous=>accountChanged?b.history:[...b.history,...previous.filter(message=>message.localBooking)]);setSignedIn(true)}
+   if(accountChanged){startedNewEnquiry.current=false;resetIntake();}
+   if(b.user){
+    if(!startedNewEnquiry.current)setMessages(previous=>accountChanged?b.history:[...b.history,...previous.filter(message=>message.localBooking)]);
+    setSignedIn(true);
+   }
    else{if(accountChanged)setMessages([]);setSignedIn(false)}
    customerId.current=b.user?.id||null;setHistoryWarning(false);
   }).catch(()=>{if(!cancelled)setError("UNAVAILABLE")}).finally(()=>{if(!cancelled)setHistoryLoading(false)});
@@ -73,11 +76,12 @@ export default function Chat({open,setOpen,lang,hideLauncherOnMobile=false}:{ope
   const text=value.trim()||(bookingActive
    ?t("预约照片：","Booking photos:")
    :t("请分析这些车辆照片，并给出下一步建议和适用的参考费用。","Please assess these vehicle photos and suggest the next step and any applicable indicative costs."));
+  const consultation=bookingActive||(draft.current.vehicle&&draft.current.service)?{}:consultationBookingContext(messages);
   const explicitAvailability=wantsEarliestBooking(text)&&
    !/取消|改期|cancel|reschedul/i.test(text)&&
-   (/\b(?:slot|appointment|opening|check[- ]?in)s?\b|预约|預約|到店|时段|時段/i.test(text)
-    ||/^earliest available[?!. ]*$/i.test(text)
-    ||(!!draft.current.service&&/^(?:asap|a\.s\.a\.p|as soon as possible|尽快|儘快)[?!.。！ ]*$/i.test(text)));
+   (/\b(?:slot|appointment|appt|opening|check[- ]?in)s?\b|预约|預約|到店|时段|時段/i.test(text)
+    ||/^(?:earliest|soonest|first|next)\s+avail(?:able)?\b/i.test(text)
+    ||(!!(draft.current.service||consultation.service)&&/^(?:asap|a\.s\.a\.p|as soon as possible|尽快|儘快)[?!.。！ ]*$/i.test(text)));
   let preparing=bookingActive||!!requestedService||bookingIntent(text)||explicitAvailability;
   let outgoing:Message|undefined;
   let submittedToken=false;
@@ -91,7 +95,11 @@ export default function Chat({open,setOpen,lang,hideLauncherOnMobile=false}:{ope
     if(symptoms)previous.notes=symptoms.slice(0,1000);
    }
    const parsed=extractBooking(text,previous);
-   preparing ||= parsed.dateSpecified&&parsed.timeSpecified;
+   preparing ||= parsed.dateSpecified&&(parsed.timeSpecified||parsed.unclearTime||!!(parsed.period&&(draft.current.service||consultation.service)));
+   if(preparing&&!bookingActive){
+    previous.vehicle ||= consultation.vehicle;
+    previous.service ||= consultation.service;
+   }
    if(!preparing&&awaitingVerification(value))return;
    let images:ChatImage[]=[];
    if(!preparing&&photos.length){
@@ -156,7 +164,7 @@ export default function Chat({open,setOpen,lang,hideLauncherOnMobile=false}:{ope
  <p className="small muted">{t("咨询文字及发送的图片可能交由 OpenAI 处理。开始预约后可提供必要联系方式，这部分会直接用于预约，不发给 AI。","Questions and submitted images may be processed by OpenAI. Once booking starts, required contact details go directly to the booking helper, not the AI.")}</p>
  <p className="chat-account-note">{historyLoading?t("正在读取对话…","Loading conversation…"):signedIn?t("已登录 · 对话会保存到你的账户","Signed in · conversations are saved to your account"):<a href="/account">{t("登录以保存咨询记录","Sign in to save your conversations")}</a>}</p>
  {historyWarning&&<p className="error" role="status">{t("本次回复已显示，但账户记录暂未保存。","Your reply is displayed, but account history could not be saved.")}</p>}
- {!bookingActive&&<><button className="link" disabled={busy||historyLoading||checkingPhotos} onClick={()=>{resetIntake();setMessages([])}}>{t("重新开始咨询／预约","Start a new enquiry / booking")}</button><div className="quick">{[t("保养多少钱？","Service prices?"),t("刹车有异响","Brake noise"),t("营业时间","Opening hours"),t("我要预约","Book a visit")].map(q=><button disabled={busy||historyLoading||checkingPhotos||photos.length>0||awaitingVerification(q)} key={q} onClick={()=>send(q)}>{q}</button>)}</div></>}
+ {!bookingActive&&<><button className="link" disabled={busy||historyLoading||checkingPhotos} onClick={()=>{startedNewEnquiry.current=true;resetIntake();setMessages([])}}>{t("重新开始咨询／预约","Start a new enquiry / booking")}</button><div className="quick">{[t("保养多少钱？","Service prices?"),t("刹车有异响","Brake noise"),t("营业时间","Opening hours"),t("我要预约","Book a visit")].map(q=><button disabled={busy||historyLoading||checkingPhotos||photos.length>0||awaitingVerification(q)} key={q} onClick={()=>send(q)}>{q}</button>)}</div></>}
  {messages.map((m,i)=><div key={i} className={"bubble "+(m.role==="user"?"user":"")}>
  {m.mode==="rules"&&<p className="small" style={{fontWeight:700,marginBottom:8}}>{m.reason==="personal_limit"?t("本账户或网络今日 AI 额度已用完，以下为基础建议；明日 UTC 00:00 重置。","This account or network has reached its daily AI allowance. Basic guidance follows; resets at 00:00 UTC."):m.reason==="daily_limit"?t("今日 AI 用量已达上限，以下是基础规则建议。","Today's AI request limit has been reached. Basic guidance follows."):t("AI 暂不可用，以下是基础规则建议。","AI is unavailable. Basic guidance follows.")}</p>}
  {m.images?.length?<div className="chat-photo-thumbnails">{m.images.map((image,j)=><img key={j} src={image.dataUrl} alt={t("已发送的车辆照片 ","Submitted vehicle photo ")+(j+1)}/>)}</div>:m.imageCount?<p className="small muted">{t(`此消息附有 ${m.imageCount} 张图片；历史记录仅保留文字。`,`This message included ${m.imageCount} photo(s); history retains text only.`)}</p>:null}

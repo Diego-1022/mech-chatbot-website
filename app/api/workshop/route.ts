@@ -51,7 +51,7 @@ async function availableOn(date:string) {
  return candidateTimes.filter(time=>!results.some(row=>row.time===time));
 }
 
-async function nextAvailableSlots(start:string,today:string,limit:number) {
+async function nextAvailableSlots(start:string,today:string,limit:number,candidateTimes=times) {
  const end=datePlus(today,60);
  if(start>end)return [];
  const {results}=await database().prepare(
@@ -60,7 +60,7 @@ async function nextAvailableSlots(start:string,today:string,limit:number) {
  const taken=new Set(results.map(({date,time})=>date+" "+time));
  const available:{date:string;time:string}[]=[];
  for(let date=start;date<=end;date=datePlus(date,1)){
-  for(const time of times){
+  for(const time of candidateTimes){
    if(taken.has(date+" "+time)||!validSlot(date,time))continue;
    available.push({date,time});
    if(available.length===limit)return available;
@@ -236,14 +236,17 @@ export async function POST(request:Request){return run(async()=>{
   if(safety?.service===null)return reply({...safety,bookingDraft:data.draft,bookingReady:false,mode:"guide"});
   const today=todaySydney(), zh=data.lang==="zh";
   const parsed=extractBooking(data.message,data.draft,today);
-  const {draft,dateSpecified,timeSpecified,earliestRequested,unclearDate,unclearTime}=parsed;
+  const {draft,dateSpecified,timeSpecified,earliestRequested,unclearDate,unclearTime,period}=parsed;
   if(customer){draft.name ||= customer.name;draft.email ||= customer.email;}
   let available=draft.date?await availableOn(draft.date):[];
   let intro="";
+  const periodTimes=period?times.filter(time=>period==="morning"?time<"12:00":time>="12:00"):times;
+  if(period&&!timeSpecified&&draft.time&&!periodTimes.includes(draft.time))delete draft.time;
   if(earliestRequested&&!timeSpecified&&!unclearDate&&!unclearTime){
+   const matching=available.filter(time=>periodTimes.includes(time));
    const suggested=dateSpecified
-    ? draft.date&&available.length?{date:draft.date,time:available[0]}:undefined
-    : (await nextAvailableSlots(today,today,1))[0];
+    ? draft.date&&matching.length?{date:draft.date,time:matching[0]}:undefined
+    : (await nextAvailableSlots(today,today,1,periodTimes))[0];
    if(suggested){
     draft.date=suggested.date;
     draft.time=suggested.time;
@@ -256,7 +259,15 @@ export async function POST(request:Request){return run(async()=>{
     delete draft.date;
     delete draft.time;
     available=[];
-    intro=zh?"未来 60 天内暂未找到可用的到店时段。":"I couldn’t find an open check-in slot in the next 60 days. ";
+    intro=zh?"未来 60 天内暂未找到符合条件的到店时段。":"I couldn’t find a matching check-in slot in the next 60 days. ";
+   }
+  }
+  if(period&&!draft.time&&available.length){
+   const matching=available.filter(time=>periodTimes.includes(time));
+   if(matching.length)available=matching;
+   else{
+    const label=period==="morning"?(zh?"上午":"morning"):(zh?"下午":"afternoon");
+    intro+=zh?`这一天没有可用的${label}时段。`:`There are no ${label} check-ins available that day. `;
    }
   }
   if(!intro&&(dateSpecified||timeSpecified)&&draft.date&&draft.time&&available.includes(draft.time)){
